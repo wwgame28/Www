@@ -878,6 +878,50 @@ body.in-game .bottom-nav{display:flex}
 
 /* ====== TOUCH PREVENT ====== */
 @media(prefers-reduced-motion:reduce){*{animation-duration:0.01ms!important;transition-duration:0.01ms!important}}
+/* ====== v6: TOWER DEFENSE («Оборона») ====== */
+#td{position:fixed;inset:0;z-index:170;display:none;flex-direction:column;background:radial-gradient(ellipse at top,#16203D,var(--midnight) 70%);padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+#td.show{display:flex;animation:fadeIn .25s ease}
+.td-top{display:flex;align-items:center;gap:6px;padding:10px 12px 6px}
+.td-pill{display:flex;align-items:center;gap:4px;padding:7px 10px;border-radius:999px;background:var(--card);border:1.5px solid var(--border);font-family:var(--display);font-weight:700;font-size:14px;color:var(--white);box-shadow:var(--clay-sm)}
+.td-pill.gold{color:var(--gold2)}
+.td-pill.red{color:var(--red)}
+.td-pill.bump{animation:tdBump .3s ease}
+@keyframes tdBump{50%{transform:scale(1.15)}}
+.td-x{margin-left:auto;width:40px;height:40px;border-radius:50%;border:1.5px solid var(--border2);background:var(--card2);color:var(--white);font-size:16px;box-shadow:var(--clay-sm)}
+.td-field{position:relative;flex:1;min-height:0}
+#td-canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block}
+.td-bottom{display:flex;align-items:center;gap:8px;padding:8px 12px 12px}
+.td-next{flex:1;min-width:0;font-size:12px;color:var(--muted);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.td-next b{color:var(--white);font-family:var(--display)}
+.td-sbtn{width:46px;height:46px;border-radius:14px;border:1.5px solid var(--border2);background:var(--card2);color:var(--white);font-family:var(--display);font-weight:700;font-size:14px;box-shadow:var(--clay-sm);flex-shrink:0}
+.td-go{min-height:46px;padding:0 16px;font-size:14px;flex-shrink:0}
+.td-go:disabled{opacity:.45}
+.td-sheet{position:absolute;left:8px;right:8px;bottom:8px;z-index:3;background:var(--card);border:1.5px solid var(--border2);border-radius:var(--r-lg);padding:12px;box-shadow:0 10px 30px rgba(0,0,0,.5);display:none}
+.td-sheet.show{display:block;animation:fadeIn .15s ease}
+.td-sheet-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-family:var(--display);font-weight:700;font-size:15px;color:var(--white)}
+.td-sheet-h button{border:none;background:none;color:var(--muted);font-size:18px;padding:0 4px}
+.td-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.td-opt{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;border-radius:var(--r-sm);border:1.5px solid var(--border);background:var(--card2);color:var(--white);font-size:11px;box-shadow:var(--clay-sm)}
+.td-opt .ti{font-size:26px;line-height:1.1}
+.td-opt .tc{font-family:var(--display);font-weight:700;color:var(--gold2);font-size:12px}
+.td-opt:disabled{opacity:.4}
+.td-info{font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5}
+.td-info b{color:var(--white)}
+.td-acts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.td-acts .btn{min-height:46px;font-size:13px}
+.td-modes{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.td-modes button{flex:1;min-width:0;padding:7px 4px;border-radius:10px;border:1.5px solid var(--border);background:var(--navy);color:var(--muted);font-size:11px;font-weight:600}
+.td-modes button.on{border-color:var(--gold);color:var(--gold2);background:var(--gold-dim)}
+.td-over{position:absolute;inset:0;z-index:4;display:none;align-items:center;justify-content:center;background:rgba(5,8,18,.78);backdrop-filter:blur(4px);padding:16px}
+.td-over.show{display:flex;animation:fadeIn .25s ease}
+.td-card{width:100%;max-width:340px;background:var(--card);border:1.5px solid var(--border2);border-radius:var(--r-lg);padding:20px 18px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.td-card .big{font-size:52px;line-height:1.1;margin-bottom:6px}
+.td-card h3{font-family:var(--display);font-size:22px;color:var(--white);margin-bottom:6px}
+.td-card p{font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:14px}
+.td-card p b{color:var(--gold2)}
+.td-card .btn{width:100%;margin-top:8px}
+.td-help{text-align:left;font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px}
+.td-help b{color:var(--white)}
 </style>
 </head>
 <body>
@@ -985,6 +1029,7 @@ body.in-game .bottom-nav{display:flex}
   <div class="map-btns">
     <button class="map-btn primary pulse" id="btn-start" onclick="startTracking()">▶</button>
     <button class="map-btn danger" id="btn-stop" onclick="stopTracking()">■</button>
+    <button class="map-btn" onclick="tdOpen()" title="Оборона" aria-label="Оборона">🏰</button>
     <button class="map-btn" onclick="centerMap()" title="Центр">◎</button>
   </div>
 </div>
@@ -1205,6 +1250,44 @@ body.in-game .bottom-nav{display:flex}
   </div>
 </div>
 
+<!-- v6: Tower defense «Оборона» -->
+<div id="td">
+  <div class="td-top">
+    <div class="td-pill red" id="td-lives">❤️ 20</div>
+    <div class="td-pill gold" id="td-gold">💰 120</div>
+    <div class="td-pill" id="td-wave">🌊 0</div>
+    <button class="td-x" onclick="tdExit()" aria-label="Выйти">✕</button>
+  </div>
+  <div class="td-field" id="td-field">
+    <canvas id="td-canvas"></canvas>
+
+    <div class="td-sheet" id="td-build">
+      <div class="td-sheet-h"><span>🔨 Построить башню</span><button onclick="tdDeselect()">✕</button></div>
+      <div class="td-grid" id="td-build-grid"></div>
+    </div>
+
+    <div class="td-sheet" id="td-tower">
+      <div class="td-sheet-h"><span id="td-tw-title">Башня</span><button onclick="tdDeselect()">✕</button></div>
+      <div class="td-info" id="td-tw-info"></div>
+      <div class="td-modes" id="td-tw-modes"></div>
+      <div class="td-acts">
+        <button class="btn btn-gold" id="td-tw-up" onclick="tdUpgrade()">⬆️ Улучшить</button>
+        <button class="btn btn-outline" id="td-tw-sell" onclick="tdSell()">💰 Продать</button>
+      </div>
+    </div>
+
+    <div class="td-over" id="td-over">
+      <div class="td-card" id="td-card"></div>
+    </div>
+  </div>
+  <div class="td-bottom">
+    <div class="td-next" id="td-next">Следующая волна: —</div>
+    <button class="td-sbtn" id="td-pause" onclick="tdTogglePause()" aria-label="Пауза">❚❚</button>
+    <button class="td-sbtn" id="td-speed" onclick="tdToggleSpeed()">×1</button>
+    <button class="btn btn-gold td-go" id="td-go" onclick="tdStartWave()">▶ Волна</button>
+  </div>
+</div>
+
 <div id="notifs"></div>
 <div id="confetti"></div>
 
@@ -1315,6 +1398,7 @@ let P = { // player persistent data
   combo:0, coins:0, introSeen:false, vip:false, muted:false, // v4/v5
   skins:['classic'], skin:'classic', trails:[], trail:'', // v4: cosmetics
   history:[], // [{date, pts, dist}]
+  tdBest:0, tdKills:0, // v6: tower defense
 };
 
 let D = { // daily data (reset each day)
@@ -2058,6 +2142,8 @@ function renderProfile() {
         <div class="mini-stat"><div class="sv">${D.dist.toFixed(2)}</div><div class="sl">км сегодня</div></div>
         <div class="mini-stat"><div class="sv">${P.totalDist.toFixed(1)}</div><div class="sl">км всего</div></div>
         <div class="mini-stat"><div class="sv">${Math.round(P.totalArea)}</div><div class="sl">м² захвачено</div></div>
+        <div class="mini-stat"><div class="sv">${P.tdBest||0}</div><div class="sl">🏰 рекорд волн</div></div>
+        <div class="mini-stat"><div class="sv">${P.tdKills||0}</div><div class="sl">👾 врагов в обороне</div></div>
       </div>
     </div>
     <div style="padding:0 12px">
@@ -3101,6 +3187,478 @@ document.addEventListener('touchmove', e => {
   if (isInteractive(e.target)) return;
   if (!e.target.closest || !e.target.closest('.full-panel, .chat-log, .graf-canvas')) e.preventDefault();
 }, { passive: false });
+
+// ==================== v6: TOWER DEFENSE «Оборона» ====================
+// Board is in grid units (cells); pixels are derived on every resize, so the
+// simulation never depends on screen size.
+const TD_COLS = 7, TD_ROWS = 11;
+const TD_PATH = [[1.5,0],[1.5,2.5],[5.5,2.5],[5.5,5.5],[1.5,5.5],[1.5,8.5],[5.5,8.5],[5.5,11]];
+const TD_TOWERS = {
+  archer:{ nm:'Лучник',  ico:'🏹', cost:50,  dmg:9,  rate:1.6,  range:2.2, color:'#FFD777', shot:8,  desc:'Быстрые выстрелы по одной цели' },
+  cannon:{ nm:'Пушка',   ico:'💣', cost:90,  dmg:22, rate:0.55, range:2.0, color:'#FFAE57', shot:5,  splash:0.95, desc:'Взрыв задевает всех рядом' },
+  frost: { nm:'Мороз',   ico:'❄️', cost:70,  dmg:4,  rate:1.0,  range:1.8, color:'#5BA8FF', shot:6,  splash:0.8, slow:0.45, slowDur:1.6, desc:'Замедляет врагов на 45%' },
+  sniper:{ nm:'Снайпер', ico:'🎯', cost:120, dmg:60, rate:0.4,  range:3.8, color:'#A98BFF', hitscan:true, pierce:true, mode:'strongest', desc:'Дальний выстрел, игнорирует броню' },
+};
+const TD_ENEMIES = {
+  grunt: { nm:'Жук',      ico:'🪲', hp:32,  speed:1.0, gold:5,  armor:0, lives:1, size:.55 },
+  runner:{ nm:'Лис',      ico:'🦊', hp:20,  speed:1.9, gold:4,  armor:0, lives:1, size:.55 },
+  tank:  { nm:'Черепаха', ico:'🐢', hp:110, speed:0.6, gold:12, armor:4, lives:2, size:.62 },
+  swarm: { nm:'Пчёлы',    ico:'🐝', hp:11,  speed:1.5, gold:2,  armor:0, lives:1, size:.45 },
+  boss:  { nm:'Босс',     ico:'👹', hp:520, speed:0.5, gold:60, armor:6, lives:5, size:.85 },
+};
+const TD_MODES = { first:'Первый', last:'Последний', strongest:'Сильный', weakest:'Слабый' };
+const TD_MAX_LVL = 3;
+const TD_START_GOLD = 120, TD_START_LIVES = 20;
+
+let TD = null;      // current run
+let tdRaf = 0;
+
+// ----- path geometry -----
+const TD_SEGS = (() => {
+  const segs = []; let acc = 0;
+  for (let i = 0; i < TD_PATH.length - 1; i++) {
+    const [x1,y1] = TD_PATH[i], [x2,y2] = TD_PATH[i+1];
+    const len = Math.hypot(x2-x1, y2-y1);
+    segs.push({ x1, y1, x2, y2, len, at: acc }); acc += len;
+  }
+  segs.total = acc;
+  return segs;
+})();
+const TD_PATH_CELLS = (() => {
+  const set = new Set();
+  for (let r = 0; r < TD_ROWS; r++) for (let c = 0; c < TD_COLS; c++) {
+    const px = c + .5, py = r + .5;
+    if (TD_SEGS.some(s => {
+      const minx = Math.min(s.x1,s.x2), maxx = Math.max(s.x1,s.x2), miny = Math.min(s.y1,s.y2), maxy = Math.max(s.y1,s.y2);
+      return px >= minx - .5 && px <= maxx + .5 && py >= miny - .5 && py <= maxy + .5;
+    })) set.add(c + ',' + r);
+  }
+  return set;
+})();
+function tdPosAt(d) {
+  for (const s of TD_SEGS) {
+    if (d <= s.at + s.len) { const k = (d - s.at) / s.len; return [s.x1 + (s.x2-s.x1)*k, s.y1 + (s.y2-s.y1)*k]; }
+  }
+  const s = TD_SEGS[TD_SEGS.length-1]; return [s.x2, s.y2];
+}
+
+// ----- waves (data-driven; spike → breather pacing) -----
+function tdWaveDef(n) {
+  const k = (n > 5 && n % 5 === 1) ? 0.7 : 1;      // breather right after a boss wave
+  const g = [['grunt', Math.round((5 + n) * k), 0.75]];
+  if (n >= 2)      g.push(['runner', Math.round((2 + n * 0.6) * k), 0.45]);
+  if (n >= 4)      g.push(['tank', Math.max(1, Math.floor(n / 3 * k)), 1.4]);
+  if (n % 3 === 0) g.push(['swarm', 8 + n, 0.22]);
+  if (n % 5 === 0) g.push(['boss', 1 + Math.floor(n / 10), 2.5]);
+  return g;
+}
+function tdHpMult(n) { return Math.pow(1.14, n - 1) * (1 + (n - 1) * 0.04); }
+function tdWaveBonus(n) { return 20 + 4 * n; }
+function tdWaveCoins(n) { return 2 + Math.floor(n / 2); }
+
+// ----- towers -----
+function tdStat(t) {
+  const b = TD_TOWERS[t.type], l = t.lvl - 1;
+  return { dmg: b.dmg * Math.pow(1.6, l), range: b.range + 0.3 * l, rate: b.rate * Math.pow(1.15, l) };
+}
+function tdUpCost(t) { return Math.round(TD_TOWERS[t.type].cost * 0.75 * t.lvl); }
+function tdSellValue(t) { return Math.floor(t.spent * 0.7); }
+function tdTowerAt(c, r) { return TD.towers.find(t => t.c === c && t.r === r); }
+
+// ----- lifecycle -----
+function tdOpen() {
+  if (S.tracking) { showNotif('Сначала останови прогулку ■', 'blue'); return; }
+  TD = {
+    gold: TD_START_GOLD, lives: TD_START_LIVES, wave: 0,
+    towers: [], enemies: [], shots: [], fx: [], queue: [], spawnT: 0, waveLeft: {},
+    speed: 1, paused: false, over: false, sel: null,
+    kills: 0, cleared: 0, coins: 0, shake: 0, nextId: 1,
+  };
+  el('td').classList.add('show');
+  tdDeselect();
+  tdLayout(); tdHud();
+  tdShowCard('intro');
+  cancelAnimationFrame(tdRaf);
+  let last = performance.now();
+  const loop = now => {
+    if (!TD || !el('td').classList.contains('show')) return;
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (!TD.paused && !TD.over) {
+      let rest = dt * TD.speed;
+      while (rest > 0) { const step = Math.min(rest, 1/60); tdUpdate(step); rest -= step; }
+    }
+    tdDraw(dt);
+    tdRaf = requestAnimationFrame(loop);
+  };
+  tdRaf = requestAnimationFrame(loop);
+}
+function tdClose() {
+  cancelAnimationFrame(tdRaf);
+  el('td').classList.remove('show');
+  TD = null;
+}
+function tdExit() {
+  if (!TD) return tdClose();
+  if (TD.over || TD.wave === 0) return tdClose();
+  TD.paused = true; tdHud();
+  tdShowCard('exit');
+}
+function tdFinish() {
+  // coins were credited wave by wave; here we only record the run
+  P.tdBest = Math.max(P.tdBest || 0, TD.cleared);
+  P.tdKills = (P.tdKills || 0) + TD.kills;
+  saveData();
+}
+
+// ----- simulation -----
+function tdStartWave() {
+  if (!TD || TD.over || TD.queue.length) return;
+  TD.paused = false; el('td-over').classList.remove('show');
+  const n = ++TD.wave;
+  if (TD.enemies.length) { const b = 5 + n; TD.gold += b; tdFloat(5.5, 10.2, `+${b} ранний вызов`, '#FFD777'); }
+  const hm = tdHpMult(n);
+  let total = 0;
+  tdWaveDef(n).forEach(([type, count, gap], gi, arr) => {
+    for (let i = 0; i < count; i++) {
+      const last = i === count - 1 && gi < arr.length - 1;
+      TD.queue.push({ type, wave: n, hm, gap: gap + (last ? 1.2 : 0) });
+    }
+    total += count;
+  });
+  TD.waveLeft[n] = total;
+  TD.spawnT = 0;
+  sfx('level'); haptic(20);
+  tdHud();
+}
+function tdUpdate(dt) {
+  if (TD.over) return;
+  // spawn
+  TD.spawnT -= dt;
+  if (TD.queue.length && TD.spawnT <= 0) {
+    const q = TD.queue.shift(), d = TD_ENEMIES[q.type];
+    const hp = Math.round(d.hp * q.hm);
+    TD.enemies.push({ id: TD.nextId++, type: q.type, wave: q.wave, hp, maxhp: hp, d: 0, x: TD_PATH[0][0], y: TD_PATH[0][1],
+      speed: d.speed * (0.95 + Math.random() * 0.1), slowT: 0, slowK: 0, flash: 0 });
+    TD.spawnT = q.gap;
+    if (!TD.queue.length) tdHud();
+  }
+  // enemies
+  for (let i = TD.enemies.length - 1; i >= 0; i--) {
+    const e = TD.enemies[i];
+    if (e.slowT > 0) e.slowT -= dt;
+    e.flash = Math.max(0, e.flash - dt);
+    e.d += e.speed * (e.slowT > 0 ? 1 - e.slowK : 1) * dt;
+    if (e.d >= TD_SEGS.total) { tdLeak(e); if (TD.over) return; continue; }
+    [e.x, e.y] = tdPosAt(e.d);
+  }
+  // towers
+  for (const t of TD.towers) {
+    t.cd -= dt;
+    if (t.cd > 0) continue;
+    const st = tdStat(t), tgt = tdAcquire(t, st.range);
+    if (!tgt) continue;
+    t.cd = 1 / st.rate; t.recoil = 0.12;
+    const b = TD_TOWERS[t.type];
+    if (b.hitscan) {
+      TD.fx.push({ k:'line', x1: t.x, y1: t.y, x2: tgt.x, y2: tgt.y, c: b.color, t: 0.18, life: 0.18 });
+      tdDamage(tgt, st.dmg, b);
+    } else {
+      TD.shots.push({ x: t.x, y: t.y, tgt: tgt.id, tx: tgt.x, ty: tgt.y, dmg: st.dmg, type: t.type });
+    }
+  }
+  // projectiles (home on the target; finish at the last known spot if it dies)
+  for (let i = TD.shots.length - 1; i >= 0; i--) {
+    const s = TD.shots[i], b = TD_TOWERS[s.type];
+    const tgt = TD.enemies.find(e => e.id === s.tgt);
+    if (tgt) { s.tx = tgt.x; s.ty = tgt.y; }
+    const dx = s.tx - s.x, dy = s.ty - s.y, dist = Math.hypot(dx, dy), step = b.shot * dt;
+    if (dist > step) { s.x += dx / dist * step; s.y += dy / dist * step; continue; }
+    TD.shots.splice(i, 1);
+    if (b.splash) {
+      TD.fx.push({ k:'ring', x: s.tx, y: s.ty, r: b.splash, c: b.color, t: 0.3, life: 0.3 });
+      TD.enemies.filter(e => Math.hypot(e.x - s.tx, e.y - s.ty) <= b.splash).forEach(e => tdDamage(e, s.dmg, b));
+    } else if (tgt) tdDamage(tgt, s.dmg, b);
+  }
+  // fx timers
+  for (let i = TD.fx.length - 1; i >= 0; i--) { TD.fx[i].t -= dt; if (TD.fx[i].t <= 0) TD.fx.splice(i, 1); }
+  for (const t of TD.towers) if (t.recoil > 0) t.recoil -= dt;
+  if (TD.shake > 0) TD.shake -= dt;
+}
+function tdAcquire(t, range) {
+  let best = null, bestV = -Infinity;
+  const mode = t.mode;
+  for (const e of TD.enemies) {
+    if (Math.hypot(e.x - t.x, e.y - t.y) > range) continue;
+    const v = mode === 'first' ? e.d : mode === 'last' ? -e.d : mode === 'strongest' ? e.hp : -e.hp;
+    if (v > bestV) { bestV = v; best = e; }
+  }
+  return best;
+}
+function tdDamage(e, dmg, b) {
+  if (e.hp <= 0) return;
+  const armor = b.pierce ? 0 : TD_ENEMIES[e.type].armor;
+  e.hp -= Math.max(1, dmg - armor);
+  e.flash = 0.08;
+  if (b.slow) { e.slowT = b.slowDur; e.slowK = b.slow; }
+  if (e.hp <= 0) tdKill(e);
+}
+function tdKill(e) {
+  const d = TD_ENEMIES[e.type];
+  TD.enemies.splice(TD.enemies.indexOf(e), 1);
+  TD.gold += d.gold; TD.kills++;
+  tdFloat(e.x, e.y, '+' + d.gold, '#FFD777');
+  if (e.type === 'boss') { TD.shake = 0.35; sfx('win'); haptic([20,40,20]); }
+  tdEnemyGone(e);
+  tdHud();
+}
+function tdLeak(e) {
+  if (TD.over) return;
+  const d = TD_ENEMIES[e.type];
+  TD.enemies.splice(TD.enemies.indexOf(e), 1);
+  TD.lives = Math.max(0, TD.lives - d.lives);
+  TD.shake = 0.25; sfx('hit'); haptic(40);
+  tdFloat(5.5, 10.3, '-' + d.lives + ' ❤️', '#FF6B7A');
+  const lp = el('td-lives'); lp.classList.remove('bump'); void lp.offsetWidth; lp.classList.add('bump');
+  if (TD.lives <= 0) { tdGameOver(); return; }
+  tdEnemyGone(e);
+  tdHud();
+}
+function tdEnemyGone(e) {
+  if (--TD.waveLeft[e.wave] > 0) return;
+  delete TD.waveLeft[e.wave];
+  const n = e.wave, bonus = tdWaveBonus(n), coins = tdWaveCoins(n);
+  TD.gold += bonus; TD.cleared = Math.max(TD.cleared, n);
+  TD.coins += coins; addCoins(coins); saveData();
+  showNotif(`🌊 Волна ${n} отбита! +${bonus} 💰, +${coins} 🪙`, 'gold');
+}
+function tdGameOver() {
+  TD.over = true; TD.queue = []; TD.shots = [];
+  sfx('error'); haptic([60,40,60]);
+  tdFinish();
+  if (TD.cleared >= 5) chatEvent(`🏰 ${P.nick || 'Игрок'} продержался ${TD.cleared} волн в Обороне`);
+  tdDeselect(); tdHud();
+  tdShowCard('over');
+}
+
+// ----- input -----
+function tdPointer(ev) {
+  if (!TD || TD.over) return;
+  const rect = el('td-canvas').getBoundingClientRect();
+  const c = Math.floor((ev.clientX - rect.left - TD.ox) / TD.cs);
+  const r = Math.floor((ev.clientY - rect.top - TD.oy) / TD.cs);
+  if (c < 0 || r < 0 || c >= TD_COLS || r >= TD_ROWS || TD_PATH_CELLS.has(c + ',' + r)) { tdDeselect(); return; }
+  const tw = tdTowerAt(c, r);
+  TD.sel = { c, r };
+  el('td-build').classList.toggle('show', !tw);
+  el('td-tower').classList.toggle('show', !!tw);
+  if (tw) tdRenderTowerSheet(tw); else tdRenderBuildSheet();
+  haptic(8);
+}
+function tdDeselect() {
+  if (TD) TD.sel = null;
+  el('td-build').classList.remove('show');
+  el('td-tower').classList.remove('show');
+}
+function tdRenderBuildSheet() {
+  el('td-build-grid').innerHTML = Object.entries(TD_TOWERS).map(([id, b]) =>
+    `<button class="td-opt" data-cost="${b.cost}" onclick="tdBuild('${id}')">
+      <span class="ti">${b.ico}</span><span>${b.nm}</span><span class="tc">💰${b.cost}</span>
+    </button>`).join('');
+  tdRefreshSheets();
+}
+function tdRenderTowerSheet(t) {
+  const b = TD_TOWERS[t.type], st = tdStat(t);
+  setText('td-tw-title', `${b.ico} ${b.nm} · ур.${t.lvl}`);
+  el('td-tw-info').innerHTML = `${b.desc}<br>Урон <b>${Math.round(st.dmg)}</b> · дальность <b>${st.range.toFixed(1)}</b> · выстр./с <b>${st.rate.toFixed(2)}</b>`;
+  el('td-tw-modes').innerHTML = Object.entries(TD_MODES).map(([m, nm]) =>
+    `<button class="${t.mode === m ? 'on' : ''}" onclick="tdSetMode('${m}')">${nm}</button>`).join('');
+  tdRefreshSheets();
+}
+function tdRefreshSheets() {
+  if (!TD) return;
+  document.querySelectorAll('#td-build-grid .td-opt').forEach(b => { b.disabled = TD.gold < +b.dataset.cost; });
+  const t = TD.sel && tdTowerAt(TD.sel.c, TD.sel.r);
+  if (!t) return;
+  const up = el('td-tw-up');
+  if (t.lvl >= TD_MAX_LVL) { up.textContent = '⭐ Максимум'; up.disabled = true; }
+  else { const c = tdUpCost(t); up.textContent = `⬆️ Улучшить · 💰${c}`; up.disabled = TD.gold < c; }
+  el('td-tw-sell').textContent = `💰 Продать · ${tdSellValue(t)}`;
+}
+function tdBuild(type) {
+  const b = TD_TOWERS[type];
+  if (!TD || !TD.sel || TD.gold < b.cost || tdTowerAt(TD.sel.c, TD.sel.r)) { sfx('error'); return; }
+  const { c, r } = TD.sel;
+  TD.gold -= b.cost;
+  const t = { type, c, r, x: c + .5, y: r + .5, lvl: 1, cd: 0, spent: b.cost, mode: b.mode || 'first', recoil: 0 };
+  TD.towers.push(t);
+  sfx('item'); haptic(15);
+  el('td-build').classList.remove('show'); el('td-tower').classList.add('show');
+  tdRenderTowerSheet(t); tdHud();
+}
+function tdUpgrade() {
+  const t = TD && TD.sel && tdTowerAt(TD.sel.c, TD.sel.r);
+  if (!t || t.lvl >= TD_MAX_LVL) return;
+  const c = tdUpCost(t);
+  if (TD.gold < c) { sfx('error'); return; }
+  TD.gold -= c; t.spent += c; t.lvl++;
+  TD.fx.push({ k:'ring', x: t.x, y: t.y, r: .7, c: '#FFD777', t: .35, life: .35 });
+  sfx('coin'); haptic(15);
+  tdRenderTowerSheet(t); tdHud();
+}
+function tdSell() {
+  const t = TD && TD.sel && tdTowerAt(TD.sel.c, TD.sel.r);
+  if (!t) return;
+  const v = tdSellValue(t);
+  TD.gold += v; TD.towers.splice(TD.towers.indexOf(t), 1);
+  tdFloat(t.x, t.y, '+' + v, '#FFD777');
+  tdDeselect(); tdHud();
+}
+function tdSetMode(m) {
+  const t = TD && TD.sel && tdTowerAt(TD.sel.c, TD.sel.r);
+  if (!t) return;
+  t.mode = m; tdRenderTowerSheet(t);
+}
+function tdTogglePause() { if (!TD || TD.over) return; TD.paused = !TD.paused; tdHud(); }
+function tdToggleSpeed() { if (!TD) return; TD.speed = TD.speed === 1 ? 2 : 1; tdHud(); }
+
+// ----- HUD / overlays -----
+function tdHud() {
+  if (!TD) return;
+  setText('td-lives', '❤️ ' + TD.lives);
+  setText('td-gold', '💰 ' + TD.gold);
+  setText('td-wave', '🌊 ' + TD.wave);
+  setText('td-pause', TD.paused ? '▶' : '❚❚');
+  setText('td-speed', '×' + TD.speed);
+  const go = el('td-go');
+  go.disabled = TD.over || TD.queue.length > 0;
+  go.textContent = TD.wave === 0 ? '▶ Начать' : (TD.enemies.length ? '⏩ Волна' : '▶ Волна');
+  const next = tdWaveDef(TD.wave + 1).map(([type, n]) => `${TD_ENEMIES[type].ico}×${n}`).join(' ');
+  el('td-next').innerHTML = `Волна <b>${TD.wave + 1}</b>: ${next}`;
+  tdRefreshSheets();
+}
+function tdShowCard(kind) {
+  const card = el('td-card'), over = el('td-over');
+  if (kind === 'intro') {
+    card.innerHTML = `<div class="big">🏰</div><h3>Оборона</h3>
+      <div class="td-help">
+        Враги идут по дороге к твоей крепости. Не дай им пройти!<br>
+        • Тапни по <b>пустой клетке</b> — построй башню.<br>
+        • Тапни по <b>башне</b> — улучши, продай или выбери цель.<br>
+        • 🪲 обычные · 🦊 быстрые · 🐢 в броне · 🐝 рой · 👹 босс каждые 5 волн.<br>
+        • За каждую отбитую волну — <b>🪙 монеты</b> для магазина Walk Wars.
+      </div>
+      ${P.tdBest ? `<p>Твой рекорд: <b>${P.tdBest}</b> волн</p>` : ''}
+      <button class="btn btn-gold" onclick="tdHideCard()">⚔️ В бой!</button>`;
+  } else if (kind === 'exit') {
+    card.innerHTML = `<div class="big">🏳️</div><h3>Покинуть бой?</h3>
+      <p>Отбито волн: <b>${TD.cleared}</b>. Заработанные монеты (<b>${TD.coins} 🪙</b>) уже у тебя.</p>
+      <button class="btn btn-outline" onclick="tdHideCard()">Продолжить</button>
+      <button class="btn btn-ghost" onclick="tdFinish();tdClose()">Выйти на карту</button>`;
+  } else {
+    const rec = TD.cleared > 0 && TD.cleared >= (P.tdBest || 0);
+    card.innerHTML = `<div class="big">💥</div><h3>Крепость пала</h3>
+      <p>Отбито волн: <b>${TD.cleared}</b>${rec ? ' — новый рекорд! 🏆' : ''}<br>
+      Врагов повержено: <b>${TD.kills}</b><br>Заработано: <b>${TD.coins} 🪙</b></p>
+      <button class="btn btn-gold" onclick="tdOpen()">🔁 Ещё раз</button>
+      <button class="btn btn-ghost" onclick="tdClose()">На карту</button>`;
+  }
+  over.classList.add('show');
+}
+function tdHideCard() { el('td-over').classList.remove('show'); if (TD) { TD.paused = false; tdHud(); } }
+function tdFloat(x, y, text, c) { TD.fx.push({ k:'txt', x, y, text, c, t: .9, life: .9 }); }
+
+// ----- rendering -----
+function tdLayout() {
+  if (!TD) return;
+  const f = el('td-field'), cv = el('td-canvas');
+  const w = f.clientWidth, h = f.clientHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  TD.ctx = cv.getContext('2d'); TD.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  TD.cs = Math.floor(Math.min(w / TD_COLS, h / TD_ROWS));
+  TD.ox = Math.round((w - TD.cs * TD_COLS) / 2); TD.oy = Math.round((h - TD.cs * TD_ROWS) / 2);
+  TD.w = w; TD.h = h;
+}
+function tdRR(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function tdEmoji(ctx, ch, x, y, size) { ctx.fillStyle = '#fff'; ctx.font = `${Math.round(size)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",serif`; ctx.fillText(ch, x, y); }
+function tdDraw() {
+  const ctx = TD.ctx, cs = TD.cs, X = gx => TD.ox + gx * cs, Y = gy => TD.oy + gy * cs;
+  ctx.setTransform(Math.min(2, window.devicePixelRatio || 1), 0, 0, Math.min(2, window.devicePixelRatio || 1), 0, 0);
+  ctx.clearRect(0, 0, TD.w, TD.h);
+  if (TD.shake > 0) ctx.translate((Math.random() - .5) * 8 * TD.shake / .35, (Math.random() - .5) * 8 * TD.shake / .35);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+  // buildable tiles
+  for (let r = 0; r < TD_ROWS; r++) for (let c = 0; c < TD_COLS; c++) {
+    if (TD_PATH_CELLS.has(c + ',' + r)) continue;
+    ctx.fillStyle = (c + r) % 2 ? 'rgba(42,55,96,.38)' : 'rgba(42,55,96,.22)';
+    tdRR(ctx, X(c) + 2, Y(r) + 2, cs - 4, cs - 4, cs * .18); ctx.fill();
+  }
+  // road
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); TD_PATH.forEach(([x, y], i) => i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y)));
+  ctx.strokeStyle = '#3A3050'; ctx.lineWidth = cs * .86; ctx.stroke();
+  ctx.strokeStyle = '#4A3E62'; ctx.lineWidth = cs * .7; ctx.stroke();
+  ctx.setLineDash([cs * .15, cs * .25]); ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
+  tdEmoji(ctx, '🌀', X(1.5), Y(.45), cs * .55);
+  tdEmoji(ctx, '🏰', X(5.5), Y(10.5), cs * .72);
+
+  // selection + range
+  if (TD.sel) {
+    const t = tdTowerAt(TD.sel.c, TD.sel.r);
+    ctx.strokeStyle = '#FFC24B'; ctx.lineWidth = 2.5;
+    tdRR(ctx, X(TD.sel.c) + 2, Y(TD.sel.r) + 2, cs - 4, cs - 4, cs * .18); ctx.stroke();
+    if (t) {
+      ctx.beginPath(); ctx.arc(X(t.x), Y(t.y), tdStat(t).range * cs, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,194,75,.08)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,194,75,.5)'; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+  }
+  // towers
+  for (const t of TD.towers) {
+    const b = TD_TOWERS[t.type], s = cs * (1 - Math.max(0, t.recoil) * .6);
+    ctx.fillStyle = '#222D4E'; tdRR(ctx, X(t.x) - s * .42, Y(t.y) - s * .42, s * .84, s * .84, s * .22); ctx.fill();
+    ctx.strokeStyle = b.color; ctx.lineWidth = 2; ctx.stroke();
+    tdEmoji(ctx, b.ico, X(t.x), Y(t.y) - cs * .03, cs * .5);
+    for (let i = 0; i < t.lvl; i++) {
+      ctx.beginPath(); ctx.arc(X(t.x) + (i - (t.lvl - 1) / 2) * cs * .16, Y(t.y) + cs * .33, cs * .05, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFC24B'; ctx.fill();
+    }
+  }
+  // enemies
+  for (const e of TD.enemies) {
+    const d = TD_ENEMIES[e.type], ex = X(e.x), ey = Y(e.y);
+    if (e.slowT > 0) { ctx.beginPath(); ctx.arc(ex, ey, cs * d.size * .55, 0, Math.PI * 2); ctx.fillStyle = 'rgba(91,168,255,.35)'; ctx.fill(); }
+    ctx.globalAlpha = e.flash > 0 ? .55 : 1;
+    tdEmoji(ctx, d.ico, ex, ey, cs * d.size);
+    ctx.globalAlpha = 1;
+    const bw = cs * Math.max(.5, d.size), by = ey - cs * d.size * .62;
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(ex - bw / 2, by, bw, 4);
+    ctx.fillStyle = e.hp / e.maxhp > .4 ? '#4FE0A0' : '#FF6B7A'; ctx.fillRect(ex - bw / 2, by, bw * Math.max(0, e.hp / e.maxhp), 4);
+  }
+  // projectiles
+  for (const s of TD.shots) {
+    ctx.beginPath(); ctx.arc(X(s.x), Y(s.y), Math.max(3, cs * .07), 0, Math.PI * 2);
+    ctx.fillStyle = TD_TOWERS[s.type].color; ctx.fill();
+  }
+  // fx
+  for (const f of TD.fx) {
+    const k = f.t / f.life;
+    ctx.globalAlpha = Math.max(0, k);
+    if (f.k === 'ring') {
+      ctx.beginPath(); ctx.arc(X(f.x), Y(f.y), f.r * cs * (1.1 - k * .6), 0, Math.PI * 2);
+      ctx.strokeStyle = f.c; ctx.lineWidth = 3; ctx.stroke();
+    } else if (f.k === 'line') {
+      ctx.beginPath(); ctx.moveTo(X(f.x1), Y(f.y1)); ctx.lineTo(X(f.x2), Y(f.y2));
+      ctx.strokeStyle = f.c; ctx.lineWidth = 3; ctx.stroke();
+    } else {
+      ctx.font = `700 ${Math.round(cs * .28)}px 'Chakra Petch',sans-serif`;
+      ctx.fillStyle = f.c; ctx.fillText(f.text, X(f.x), Y(f.y) - (1 - k) * cs * .6);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+window.addEventListener('resize', () => { if (TD) tdLayout(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && TD && !TD.over && TD.wave > 0) { TD.paused = true; tdHud(); } });
+document.addEventListener('DOMContentLoaded', () => { const cv = el('td-canvas'); if (cv) cv.addEventListener('pointerdown', tdPointer); });
 </script>
 </body>
 </html>
