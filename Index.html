@@ -879,49 +879,80 @@ body.in-game .bottom-nav{display:flex}
 /* ====== TOUCH PREVENT ====== */
 @media(prefers-reduced-motion:reduce){*{animation-duration:0.01ms!important;transition-duration:0.01ms!important}}
 /* ====== v6: TOWER DEFENSE («Оборона») ====== */
-#td{position:fixed;inset:0;z-index:170;display:none;flex-direction:column;background:radial-gradient(ellipse at top,#16203D,var(--midnight) 70%);padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+#td{position:fixed;inset:0;z-index:170;display:none;flex-direction:column;background:radial-gradient(120% 70% at 50% 0%,#1E2A52 0%,#0E1530 55%,#070B14 100%);padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);font-family:var(--body)}
 #td.show{display:flex;animation:fadeIn .25s ease}
-.td-top{display:flex;align-items:center;gap:6px;padding:10px 12px 6px}
-.td-pill{display:flex;align-items:center;gap:4px;padding:7px 10px;border-radius:999px;background:var(--card);border:1.5px solid var(--border);font-family:var(--display);font-weight:700;font-size:14px;color:var(--white);box-shadow:var(--clay-sm)}
+.td-top{display:flex;align-items:center;gap:6px;padding:10px 12px 8px}
+.td-pill{display:flex;align-items:center;gap:6px;height:38px;padding:0 12px 0 5px;border-radius:999px;background:linear-gradient(180deg,var(--card2),var(--navy));border:1.5px solid var(--border2);font-family:var(--display);font-weight:700;font-size:16px;color:var(--white);box-shadow:var(--clay-sm);transition:transform .2s}
+.td-pill .pi{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.07);font-size:15px}
 .td-pill.gold{color:var(--gold2)}
 .td-pill.red{color:var(--red)}
+.td-pill.low{border-color:var(--red);animation:tdLow 1s ease-in-out infinite}
+@keyframes tdLow{50%{box-shadow:0 0 0 4px rgba(255,107,122,.25),var(--clay-sm)}}
 .td-pill.bump{animation:tdBump .3s ease}
-@keyframes tdBump{50%{transform:scale(1.15)}}
-.td-x{margin-left:auto;width:40px;height:40px;border-radius:50%;border:1.5px solid var(--border2);background:var(--card2);color:var(--white);font-size:16px;box-shadow:var(--clay-sm)}
+@keyframes tdBump{50%{transform:scale(1.12)}}
+.td-x{margin-left:auto;width:40px;height:40px;border-radius:50%;border:1.5px solid var(--border2);background:linear-gradient(180deg,var(--card2),var(--navy));color:var(--muted);font-size:15px;box-shadow:var(--clay-sm)}
+.td-prog{height:5px;margin:0 14px 4px;border-radius:99px;background:rgba(255,255,255,.06);overflow:hidden}
+#td-prog-fill{height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--teal),var(--mint));box-shadow:0 0 10px rgba(111,240,176,.5);transition:width .3s ease}
 .td-field{position:relative;flex:1;min-height:0}
 #td-canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block}
-.td-bottom{display:flex;align-items:center;gap:8px;padding:8px 12px 12px}
-.td-next{flex:1;min-width:0;font-size:12px;color:var(--muted);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.td-next b{color:var(--white);font-family:var(--display)}
-.td-sbtn{width:46px;height:46px;border-radius:14px;border:1.5px solid var(--border2);background:var(--card2);color:var(--white);font-family:var(--display);font-weight:700;font-size:14px;box-shadow:var(--clay-sm);flex-shrink:0}
+.td-bottom{display:flex;align-items:center;gap:8px;padding:8px 12px 12px;background:linear-gradient(0deg,rgba(7,11,20,.9),rgba(7,11,20,0))}
+.td-next{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.td-next-l{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)}
+.td-chips{display:flex;gap:4px;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent);mask-image:linear-gradient(90deg,#000 85%,transparent)}
+.td-chip{display:flex;align-items:center;gap:1px;padding:2px 6px 2px 4px;border-radius:999px;background:var(--card);border:1px solid var(--border);font-size:12px;flex-shrink:0}
+.td-chip b{font-family:var(--display);font-size:12px;color:var(--white)}
+.td-chip.boss{border-color:var(--red);background:rgba(255,107,122,.14)}
+.td-sbtn{width:46px;height:46px;border-radius:15px;border:1.5px solid var(--border2);background:linear-gradient(180deg,var(--card2),var(--navy));color:var(--white);font-family:var(--display);font-weight:700;font-size:14px;box-shadow:var(--clay-sm);flex-shrink:0}
+.td-sbtn:active{transform:translateY(2px)}
 .td-go{min-height:46px;padding:0 16px;font-size:14px;flex-shrink:0}
-.td-go:disabled{opacity:.45}
-.td-sheet{position:absolute;left:8px;right:8px;bottom:8px;z-index:3;background:var(--card);border:1.5px solid var(--border2);border-radius:var(--r-lg);padding:12px;box-shadow:0 10px 30px rgba(0,0,0,.5);display:none}
-.td-sheet.show{display:block;animation:fadeIn .15s ease}
-.td-sheet-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-family:var(--display);font-weight:700;font-size:15px;color:var(--white)}
-.td-sheet-h button{border:none;background:none;color:var(--muted);font-size:18px;padding:0 4px}
-.td-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.td-opt{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;border-radius:var(--r-sm);border:1.5px solid var(--border);background:var(--card2);color:var(--white);font-size:11px;box-shadow:var(--clay-sm)}
-.td-opt .ti{font-size:26px;line-height:1.1}
+.td-go:not(:disabled){animation:ctaPulse 1.8s ease-in-out infinite}
+.td-go:disabled{opacity:.4;animation:none}
+.td-sheet{position:absolute;left:8px;right:8px;bottom:8px;z-index:3;background:linear-gradient(180deg,#232E52,var(--card));border:1.5px solid var(--border2);border-top:3px solid var(--tc,var(--gold));border-radius:var(--r-lg);padding:12px;box-shadow:0 14px 40px rgba(0,0,0,.55);display:none}
+.td-sheet.show{display:block;animation:tdSheet .22s cubic-bezier(.34,1.56,.64,1)}
+@keyframes tdSheet{from{transform:translateY(24px);opacity:0}}
+.td-sheet-h{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;font-family:var(--display);font-weight:700;font-size:15px;color:var(--white)}
+.td-sheet-h>span{display:flex;align-items:center;gap:10px;min-width:0}
+.td-sheet-h small{display:block;font-family:var(--body);font-weight:500;font-size:11px;color:var(--muted);margin-top:1px}
+.td-sheet-h button{border:none;background:rgba(255,255,255,.06);width:30px;height:30px;border-radius:50%;color:var(--muted);font-size:14px;flex-shrink:0}
+.td-tw-ico{display:grid;place-items:center;width:44px;height:44px;border-radius:14px;background:var(--navy);border:2px solid var(--tc);font-size:24px;box-shadow:0 0 14px color-mix(in srgb,var(--tc) 35%,transparent);flex-shrink:0}
+.td-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.td-opt{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px 7px;border-radius:var(--r-sm);border:1.5px solid var(--border);border-top:3px solid var(--tc);background:linear-gradient(180deg,var(--card2),var(--navy));color:var(--white);font-size:11px;font-weight:600;box-shadow:var(--clay-sm);transition:transform .12s}
+.td-opt:active{transform:translateY(3px)}
+.td-opt .ti{font-size:27px;line-height:1.1;filter:drop-shadow(0 3px 4px rgba(0,0,0,.4))}
+.td-opt .tmini{display:flex;flex-direction:column;gap:2px;width:78%;margin:2px 0}
+.td-opt .tmini i{display:block;height:3px;border-radius:2px;background:var(--tc);opacity:.8}
 .td-opt .tc{font-family:var(--display);font-weight:700;color:var(--gold2);font-size:12px}
-.td-opt:disabled{opacity:.4}
-.td-info{font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5}
-.td-info b{color:var(--white)}
-.td-acts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.td-opt:disabled{opacity:.38;filter:grayscale(.6)}
+.td-info{margin-bottom:10px}
+.td-stat{display:grid;grid-template-columns:72px 1fr 80px;align-items:center;gap:8px;font-size:11px;color:var(--muted);margin-bottom:5px}
+.td-stat b{font-family:var(--display);color:var(--white);font-size:12px;text-align:right}
+.td-stat em{font-style:normal;color:var(--mint)}
+.td-bar{position:relative;height:7px;border-radius:99px;background:rgba(0,0,0,.35);overflow:hidden}
+.td-bar i{position:absolute;left:0;top:0;bottom:0;border-radius:99px;background:var(--tc)}
+.td-bar i.nx{background:repeating-linear-gradient(135deg,rgba(111,240,176,.55) 0 4px,rgba(111,240,176,.25) 4px 8px)}
+.td-acts{display:grid;grid-template-columns:1.4fr 1fr;gap:8px}
 .td-acts .btn{min-height:46px;font-size:13px}
-.td-modes{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
-.td-modes button{flex:1;min-width:0;padding:7px 4px;border-radius:10px;border:1.5px solid var(--border);background:var(--navy);color:var(--muted);font-size:11px;font-weight:600}
+.td-acts .btn:disabled{opacity:.45}
+.td-modes{display:flex;align-items:center;gap:5px;margin-bottom:10px}
+.td-modes-l{font-size:11px;color:var(--muted2);font-weight:600;margin-right:2px}
+.td-modes button{flex:1;min-width:0;padding:7px 2px;border-radius:10px;border:1.5px solid var(--border);background:var(--navy);color:var(--muted);font-size:11px;font-weight:600}
 .td-modes button.on{border-color:var(--gold);color:var(--gold2);background:var(--gold-dim)}
-.td-over{position:absolute;inset:0;z-index:4;display:none;align-items:center;justify-content:center;background:rgba(5,8,18,.78);backdrop-filter:blur(4px);padding:16px}
+.td-over{position:absolute;inset:0;z-index:4;display:none;align-items:center;justify-content:center;background:rgba(5,8,18,.72);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);padding:16px}
 .td-over.show{display:flex;animation:fadeIn .25s ease}
-.td-card{width:100%;max-width:340px;background:var(--card);border:1.5px solid var(--border2);border-radius:var(--r-lg);padding:20px 18px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.5)}
-.td-card .big{font-size:52px;line-height:1.1;margin-bottom:6px}
-.td-card h3{font-family:var(--display);font-size:22px;color:var(--white);margin-bottom:6px}
-.td-card p{font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:14px}
+.td-card{width:100%;max-width:340px;background:linear-gradient(180deg,#25315A,var(--card));border:1.5px solid var(--border2);border-radius:var(--r-lg);padding:22px 18px 16px;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.08);animation:tdSheet .3s cubic-bezier(.34,1.56,.64,1)}
+.td-card .big{font-size:56px;line-height:1.1;margin-bottom:6px;filter:drop-shadow(0 6px 14px rgba(255,194,75,.35))}
+.td-card h3{font-family:var(--display);font-size:24px;color:var(--white);margin-bottom:8px}
+.td-card p{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:12px}
 .td-card p b{color:var(--gold2)}
 .td-card .btn{width:100%;margin-top:8px}
-.td-help{text-align:left;font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px}
+.td-help{text-align:left;font-size:12.5px;color:var(--muted);line-height:1.6;margin-bottom:12px}
 .td-help b{color:var(--white)}
+.td-roster{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
+.td-roster div{display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 2px;border-radius:12px;background:var(--navy);border:1.5px solid var(--border);border-bottom:3px solid var(--tc);font-size:10.5px;color:var(--muted)}
+.td-roster span{font-size:22px}
+.map-btn.td-entry{flex-direction:column;gap:0;font-size:20px;line-height:1;background:linear-gradient(160deg,var(--purple),#6A4FD8);border:none;color:#fff;box-shadow:0 0 0 4px rgba(169,139,255,.18),0 6px 16px rgba(106,79,216,.5);animation:tdEntry 2.6s ease-in-out infinite}
+.map-btn.td-entry span{font-family:var(--display);font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-top:1px}
+@keyframes tdEntry{50%{box-shadow:0 0 0 7px rgba(169,139,255,.1),0 6px 20px rgba(106,79,216,.7)}}
 </style>
 </head>
 <body>
@@ -1029,7 +1060,7 @@ body.in-game .bottom-nav{display:flex}
   <div class="map-btns">
     <button class="map-btn primary pulse" id="btn-start" onclick="startTracking()">▶</button>
     <button class="map-btn danger" id="btn-stop" onclick="stopTracking()">■</button>
-    <button class="map-btn" onclick="tdOpen()" title="Оборона" aria-label="Оборона">🏰</button>
+    <button class="map-btn td-entry" onclick="tdOpen()" title="Оборона" aria-label="Оборона">🏰<span>бой</span></button>
     <button class="map-btn" onclick="centerMap()" title="Центр">◎</button>
   </div>
 </div>
@@ -1253,11 +1284,12 @@ body.in-game .bottom-nav{display:flex}
 <!-- v6: Tower defense «Оборона» -->
 <div id="td">
   <div class="td-top">
-    <div class="td-pill red" id="td-lives">❤️ 20</div>
-    <div class="td-pill gold" id="td-gold">💰 120</div>
-    <div class="td-pill" id="td-wave">🌊 0</div>
+    <div class="td-pill red" id="td-lives"></div>
+    <div class="td-pill gold" id="td-gold"></div>
+    <div class="td-pill" id="td-wave"></div>
     <button class="td-x" onclick="tdExit()" aria-label="Выйти">✕</button>
   </div>
+  <div class="td-prog"><div id="td-prog-fill"></div></div>
   <div class="td-field" id="td-field">
     <canvas id="td-canvas"></canvas>
 
@@ -3273,6 +3305,7 @@ function tdOpen() {
     towers: [], enemies: [], shots: [], fx: [], queue: [], spawnT: 0, waveLeft: {},
     speed: 1, paused: false, over: false, sel: null,
     kills: 0, cleared: 0, coins: 0, shake: 0, nextId: 1,
+    parts: [], banner: null, anim: 0, castleHit: 0, waveTotal: {},
   };
   el('td').classList.add('show');
   tdDeselect();
@@ -3325,13 +3358,17 @@ function tdStartWave() {
     }
     total += count;
   });
-  TD.waveLeft[n] = total;
+  TD.waveLeft[n] = total; TD.waveTotal[n] = total;
+  const boss = n % 5 === 0;
+  tdBanner(`ВОЛНА ${n}`, boss ? '⚠️ Идёт босс!' : tdWaveDef(n).map(([t, c]) => `${TD_ENEMIES[t].nm} ×${c}`).join(' · '), boss ? '#FF6B7A' : '#FFD777');
   TD.spawnT = 0;
   sfx('level'); haptic(20);
   tdHud();
 }
 function tdUpdate(dt) {
   if (TD.over) return;
+  TD.anim += dt;
+  if (TD.castleHit > 0) TD.castleHit -= dt;
   // spawn
   TD.spawnT -= dt;
   if (TD.queue.length && TD.spawnT <= 0) {
@@ -3354,10 +3391,12 @@ function tdUpdate(dt) {
   // towers
   for (const t of TD.towers) {
     t.cd -= dt;
-    if (t.cd > 0) continue;
+    if (t.muzzle > 0) t.muzzle -= dt;
     const st = tdStat(t), tgt = tdAcquire(t, st.range);
-    if (!tgt) continue;
-    t.cd = 1 / st.rate; t.recoil = 0.12;
+    if (tgt) t.ang = tdTurn(t.ang ?? -Math.PI / 2, Math.atan2(tgt.y - t.y, tgt.x - t.x), dt * 12);
+    if (t.cd > 0 || !tgt) continue;
+    t.ang = Math.atan2(tgt.y - t.y, tgt.x - t.x);
+    t.cd = 1 / st.rate; t.recoil = 0.12; t.muzzle = 0.08;
     const b = TD_TOWERS[t.type];
     if (b.hitscan) {
       TD.fx.push({ k:'line', x1: t.x, y1: t.y, x2: tgt.x, y2: tgt.y, c: b.color, t: 0.18, life: 0.18 });
@@ -3372,18 +3411,25 @@ function tdUpdate(dt) {
     const tgt = TD.enemies.find(e => e.id === s.tgt);
     if (tgt) { s.tx = tgt.x; s.ty = tgt.y; }
     const dx = s.tx - s.x, dy = s.ty - s.y, dist = Math.hypot(dx, dy), step = b.shot * dt;
-    if (dist > step) { s.x += dx / dist * step; s.y += dy / dist * step; continue; }
+    if (dist > step) { s.px = s.x - dx / dist * .25; s.py = s.y - dy / dist * .25; s.x += dx / dist * step; s.y += dy / dist * step; continue; }
     TD.shots.splice(i, 1);
     if (b.splash) {
-      TD.fx.push({ k:'ring', x: s.tx, y: s.ty, r: b.splash, c: b.color, t: 0.3, life: 0.3 });
+      TD.fx.push({ k:'ring', x: s.tx, y: s.ty, r: b.splash, c: b.color, t: 0.35, life: 0.35 });
+      tdBurst(s.tx, s.ty, b.color, 10, 2.2, .45);
       TD.enemies.filter(e => Math.hypot(e.x - s.tx, e.y - s.ty) <= b.splash).forEach(e => tdDamage(e, s.dmg, b));
     } else if (tgt) tdDamage(tgt, s.dmg, b);
   }
   // fx timers
   for (let i = TD.fx.length - 1; i >= 0; i--) { TD.fx[i].t -= dt; if (TD.fx[i].t <= 0) TD.fx.splice(i, 1); }
   for (const t of TD.towers) if (t.recoil > 0) t.recoil -= dt;
+  for (let i = TD.parts.length - 1; i >= 0; i--) {
+    const p = TD.parts[i]; p.t -= dt;
+    if (p.t <= 0) { TD.parts.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= .92; p.vy = p.vy * .92 + 3 * dt;
+  }
   if (TD.shake > 0) TD.shake -= dt;
 }
+function tdTurn(a, b, k) { const d = Math.atan2(Math.sin(b - a), Math.cos(b - a)); return a + d * Math.min(1, k); }
 function tdAcquire(t, range) {
   let best = null, bestV = -Infinity;
   const mode = t.mode;
@@ -3399,6 +3445,7 @@ function tdDamage(e, dmg, b) {
   const armor = b.pierce ? 0 : TD_ENEMIES[e.type].armor;
   e.hp -= Math.max(1, dmg - armor);
   e.flash = 0.08;
+  if (TD.parts.length < 220) tdBurst(e.x, e.y, b.color, 3, 1.6, .3);
   if (b.slow) { e.slowT = b.slowDur; e.slowK = b.slow; }
   if (e.hp <= 0) tdKill(e);
 }
@@ -3407,6 +3454,8 @@ function tdKill(e) {
   TD.enemies.splice(TD.enemies.indexOf(e), 1);
   TD.gold += d.gold; TD.kills++;
   tdFloat(e.x, e.y, '+' + d.gold, '#FFD777');
+  TD.fx.push({ k:'pop', ico: d.ico, x: e.x, y: e.y, sz: d.size, t: .3, life: .3 });
+  tdBurst(e.x, e.y, '#E8ECFF', 7, 2, .5);
   if (e.type === 'boss') { TD.shake = 0.35; sfx('win'); haptic([20,40,20]); }
   tdEnemyGone(e);
   tdHud();
@@ -3416,7 +3465,7 @@ function tdLeak(e) {
   const d = TD_ENEMIES[e.type];
   TD.enemies.splice(TD.enemies.indexOf(e), 1);
   TD.lives = Math.max(0, TD.lives - d.lives);
-  TD.shake = 0.25; sfx('hit'); haptic(40);
+  TD.shake = 0.25; TD.castleHit = 0.35; sfx('hit'); haptic(40);
   tdFloat(5.5, 10.3, '-' + d.lives + ' ❤️', '#FF6B7A');
   const lp = el('td-lives'); lp.classList.remove('bump'); void lp.offsetWidth; lp.classList.add('bump');
   if (TD.lives <= 0) { tdGameOver(); return; }
@@ -3429,7 +3478,8 @@ function tdEnemyGone(e) {
   const n = e.wave, bonus = tdWaveBonus(n), coins = tdWaveCoins(n);
   TD.gold += bonus; TD.cleared = Math.max(TD.cleared, n);
   TD.coins += coins; addCoins(coins); saveData();
-  showNotif(`🌊 Волна ${n} отбита! +${bonus} 💰, +${coins} 🪙`, 'gold');
+  tdBanner(`ВОЛНА ${n} ОТБИТА`, `+${bonus} 💰 золота · +${coins} 🪙 монет`, '#4FE0A0');
+  sfx('win');
 }
 function tdGameOver() {
   TD.over = true; TD.queue = []; TD.shots = [];
@@ -3459,18 +3509,33 @@ function tdDeselect() {
   el('td-build').classList.remove('show');
   el('td-tower').classList.remove('show');
 }
+const TD_MAXS = { dmg: 60, range: 3.8, rate: 1.6 };
+function tdBars(st, next) {
+  const row = (lbl, key, v, nv, fmt) => `<div class="td-stat"><span>${lbl}</span>
+    <div class="td-bar">${nv != null ? `<i class="nx" style="width:${Math.min(100, nv / TD_MAXS[key] * 100)}%"></i>` : ''}<i style="width:${Math.min(100, v / TD_MAXS[key] * 100)}%"></i></div>
+    <b>${fmt(v)}${nv != null ? ` <em>→ ${fmt(nv)}</em>` : ''}</b></div>`;
+  return row('Урон', 'dmg', st.dmg, next && next.dmg, v => Math.round(v))
+       + row('Дальность', 'range', st.range, next && next.range, v => v.toFixed(1))
+       + row('Скорость', 'rate', st.rate, next && next.rate, v => v.toFixed(2));
+}
 function tdRenderBuildSheet() {
-  el('td-build-grid').innerHTML = Object.entries(TD_TOWERS).map(([id, b]) =>
-    `<button class="td-opt" data-cost="${b.cost}" onclick="tdBuild('${id}')">
-      <span class="ti">${b.ico}</span><span>${b.nm}</span><span class="tc">💰${b.cost}</span>
-    </button>`).join('');
+  el('td-build-grid').innerHTML = Object.entries(TD_TOWERS).map(([id, b]) => {
+    const st = tdStat({ type: id, lvl: 1 });
+    return `<button class="td-opt" style="--tc:${b.color}" data-cost="${b.cost}" onclick="tdBuild('${id}')">
+      <span class="ti">${b.ico}</span><span class="tn">${b.nm}</span>
+      <span class="tmini"><i style="width:${st.dmg / TD_MAXS.dmg * 100}%"></i><i style="width:${st.range / TD_MAXS.range * 100}%"></i><i style="width:${st.rate / TD_MAXS.rate * 100}%"></i></span>
+      <span class="tc">💰${b.cost}</span>
+    </button>`;
+  }).join('');
   tdRefreshSheets();
 }
 function tdRenderTowerSheet(t) {
   const b = TD_TOWERS[t.type], st = tdStat(t);
-  setText('td-tw-title', `${b.ico} ${b.nm} · ур.${t.lvl}`);
-  el('td-tw-info').innerHTML = `${b.desc}<br>Урон <b>${Math.round(st.dmg)}</b> · дальность <b>${st.range.toFixed(1)}</b> · выстр./с <b>${st.rate.toFixed(2)}</b>`;
-  el('td-tw-modes').innerHTML = Object.entries(TD_MODES).map(([m, nm]) =>
+  const next = t.lvl < TD_MAX_LVL ? tdStat({ type: t.type, lvl: t.lvl + 1 }) : null;
+  el('td-tower').style.setProperty('--tc', b.color);
+  el('td-tw-title').innerHTML = `<span class="td-tw-ico">${b.ico}</span><span>${b.nm}<small>${'◆'.repeat(t.lvl)}${'◇'.repeat(TD_MAX_LVL - t.lvl)} · ${b.desc}</small></span>`;
+  el('td-tw-info').innerHTML = tdBars(st, next);
+  el('td-tw-modes').innerHTML = `<span class="td-modes-l">Цель:</span>` + Object.entries(TD_MODES).map(([m, nm]) =>
     `<button class="${t.mode === m ? 'on' : ''}" onclick="tdSetMode('${m}')">${nm}</button>`).join('');
   tdRefreshSheets();
 }
@@ -3524,16 +3589,21 @@ function tdToggleSpeed() { if (!TD) return; TD.speed = TD.speed === 1 ? 2 : 1; t
 // ----- HUD / overlays -----
 function tdHud() {
   if (!TD) return;
-  setText('td-lives', '❤️ ' + TD.lives);
-  setText('td-gold', '💰 ' + TD.gold);
-  setText('td-wave', '🌊 ' + TD.wave);
+  el('td-lives').innerHTML = `<span class="pi">❤️</span>${TD.lives}`;
+  el('td-lives').classList.toggle('low', TD.lives <= 5);
+  if (TD.lastGold != null && TD.gold > TD.lastGold) { const g = el('td-gold'); g.classList.remove('bump'); void g.offsetWidth; g.classList.add('bump'); }
+  TD.lastGold = TD.gold;
+  el('td-gold').innerHTML = `<span class="pi">💰</span>${TD.gold}`;
+  el('td-wave').innerHTML = `<span class="pi">🌊</span>${TD.wave}`;
+  const tot = TD.waveTotal[TD.wave], left = TD.waveLeft[TD.wave];
+  el('td-prog-fill').style.width = (tot ? (1 - (left || 0) / tot) * 100 : 0) + '%';
   setText('td-pause', TD.paused ? '▶' : '❚❚');
   setText('td-speed', '×' + TD.speed);
   const go = el('td-go');
   go.disabled = TD.over || TD.queue.length > 0;
   go.textContent = TD.wave === 0 ? '▶ Начать' : (TD.enemies.length ? '⏩ Волна' : '▶ Волна');
-  const next = tdWaveDef(TD.wave + 1).map(([type, n]) => `${TD_ENEMIES[type].ico}×${n}`).join(' ');
-  el('td-next').innerHTML = `Волна <b>${TD.wave + 1}</b>: ${next}`;
+  const next = tdWaveDef(TD.wave + 1).map(([type, n]) => `<span class="td-chip${type === 'boss' ? ' boss' : ''}">${TD_ENEMIES[type].ico}<b>${n}</b></span>`).join('');
+  el('td-next').innerHTML = `<span class="td-next-l">Далее · ${TD.wave + 1}</span><span class="td-chips">${next}</span>`;
   tdRefreshSheets();
 }
 function tdShowCard(kind) {
@@ -3547,6 +3617,7 @@ function tdShowCard(kind) {
         • 🪲 обычные · 🦊 быстрые · 🐢 в броне · 🐝 рой · 👹 босс каждые 5 волн.<br>
         • За каждую отбитую волну — <b>🪙 монеты</b> для магазина Walk Wars.
       </div>
+      <div class="td-roster">${Object.values(TD_TOWERS).map(b => `<div style="--tc:${b.color}"><span>${b.ico}</span>${b.nm}</div>`).join('')}</div>
       ${P.tdBest ? `<p>Твой рекорд: <b>${P.tdBest}</b> волн</p>` : ''}
       <button class="btn btn-gold" onclick="tdHideCard()">⚔️ В бой!</button>`;
   } else if (kind === 'exit') {
@@ -3568,92 +3639,260 @@ function tdHideCard() { el('td-over').classList.remove('show'); if (TD) { TD.pau
 function tdFloat(x, y, text, c) { TD.fx.push({ k:'txt', x, y, text, c, t: .9, life: .9 }); }
 
 // ----- rendering -----
+// Static scenery (tiles, road, vignette) is baked into an offscreen canvas on
+// resize; emoji are cached as sprites. Per frame we only draw moving things.
+const TD_EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",serif';
+const TD_SPR = new Map();
+function tdDpr() { return Math.min(2, window.devicePixelRatio || 1); }
 function tdLayout() {
   if (!TD) return;
-  const f = el('td-field'), cv = el('td-canvas');
-  const w = f.clientWidth, h = f.clientHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
+  const f = el('td-field'), cv = el('td-canvas'), dpr = tdDpr();
+  const w = f.clientWidth, h = f.clientHeight;
   cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
-  TD.ctx = cv.getContext('2d'); TD.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  TD.cs = Math.floor(Math.min(w / TD_COLS, h / TD_ROWS));
+  TD.ctx = cv.getContext('2d');
+  TD.cs = Math.floor(Math.min(w / TD_COLS, (h - 8) / TD_ROWS));
   TD.ox = Math.round((w - TD.cs * TD_COLS) / 2); TD.oy = Math.round((h - TD.cs * TD_ROWS) / 2);
   TD.w = w; TD.h = h;
+  TD_SPR.clear();
+  TD.bg = tdBakeBg();
+  if (!TD.flies) TD.flies = Array.from({ length: 14 }, () => ({ x: Math.random() * TD_COLS, y: Math.random() * TD_ROWS, ph: Math.random() * 6.28, sp: .15 + Math.random() * .25 }));
+}
+function tdSprite(ch, px) {
+  px = Math.max(8, Math.round(px));
+  const key = ch + '|' + px;
+  let c = TD_SPR.get(key); if (c) return c;
+  const dpr = tdDpr(), s = Math.ceil(px * 1.35);
+  c = document.createElement('canvas'); c.width = c.height = Math.ceil(s * dpr); c.size = s;
+  const x = c.getContext('2d'); x.scale(dpr, dpr);
+  x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#fff';
+  x.font = `${px}px ${TD_EMOJI_FONT}`; x.fillText(ch, s / 2, s / 2 + px * .05);
+  TD_SPR.set(key, c); return c;
+}
+function tdSpr(ctx, ch, x, y, px, sx = 1, sy = 1) {
+  const s = tdSprite(ch, px), w = s.size * sx, h = s.size * sy;
+  ctx.drawImage(s, x - w / 2, y - h / 2, w, h);
 }
 function tdRR(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
-function tdEmoji(ctx, ch, x, y, size) { ctx.fillStyle = '#fff'; ctx.font = `${Math.round(size)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",serif`; ctx.fillText(ch, x, y); }
-function tdDraw() {
-  const ctx = TD.ctx, cs = TD.cs, X = gx => TD.ox + gx * cs, Y = gy => TD.oy + gy * cs;
-  ctx.setTransform(Math.min(2, window.devicePixelRatio || 1), 0, 0, Math.min(2, window.devicePixelRatio || 1), 0, 0);
-  ctx.clearRect(0, 0, TD.w, TD.h);
-  if (TD.shake > 0) ctx.translate((Math.random() - .5) * 8 * TD.shake / .35, (Math.random() - .5) * 8 * TD.shake / .35);
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+function tdEllipse(ctx, x, y, rx, ry) { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); }
+function tdRoad(ctx, X, Y) { ctx.beginPath(); TD_PATH.forEach(([x, y], i) => i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y))); }
+function tdBakeBg() {
+  const dpr = tdDpr(), cv = document.createElement('canvas');
+  cv.width = Math.round(TD.w * dpr); cv.height = Math.round(TD.h * dpr);
+  const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+  const cs = TD.cs, X = gx => TD.ox + gx * cs, Y = gy => TD.oy + gy * cs;
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 
-  // buildable tiles
+  // board plate
+  tdRR(ctx, X(0) - 6, Y(0) - 6, cs * TD_COLS + 12, cs * TD_ROWS + 12, cs * .32);
+  ctx.fillStyle = '#0C1226'; ctx.fill();
+  ctx.strokeStyle = 'rgba(91,168,255,.12)'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // raised clay tiles with a little grass / pebbles
   for (let r = 0; r < TD_ROWS; r++) for (let c = 0; c < TD_COLS; c++) {
     if (TD_PATH_CELLS.has(c + ',' + r)) continue;
-    ctx.fillStyle = (c + r) % 2 ? 'rgba(42,55,96,.38)' : 'rgba(42,55,96,.22)';
-    tdRR(ctx, X(c) + 2, Y(r) + 2, cs - 4, cs - 4, cs * .18); ctx.fill();
+    const x = X(c) + 3, y = Y(r) + 3, s = cs - 6, rad = cs * .2;
+    tdRR(ctx, x, y + 3, s, s, rad); ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fill();
+    const g = ctx.createLinearGradient(0, y, 0, y + s);
+    const alt = (c + r) % 2;
+    g.addColorStop(0, alt ? '#26365F' : '#223159'); g.addColorStop(1, alt ? '#1C2850' : '#19244A');
+    tdRR(ctx, x, y, s, s, rad); ctx.fillStyle = g; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.lineWidth = 1; ctx.stroke();
+    const n = rnd();
+    if (n < .45) {        // grass tuft
+      const gx = x + s * (.25 + rnd() * .5), gy = y + s * (.3 + rnd() * .45);
+      ctx.strokeStyle = 'rgba(79,224,160,.28)'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+      for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(gx + k * cs * .04, gy); ctx.lineTo(gx + k * cs * .07, gy - cs * (.07 + (k ? 0 : .03))); ctx.stroke(); }
+    } else if (n < .7) {  // pebbles
+      ctx.fillStyle = 'rgba(166,184,223,.14)';
+      for (let k = 0; k < 2; k++) { tdEllipse(ctx, x + s * (.2 + rnd() * .6), y + s * (.2 + rnd() * .6), cs * .035, cs * .025); ctx.fill(); }
+    }
   }
-  // road
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.beginPath(); TD_PATH.forEach(([x, y], i) => i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y)));
-  ctx.strokeStyle = '#3A3050'; ctx.lineWidth = cs * .86; ctx.stroke();
-  ctx.strokeStyle = '#4A3E62'; ctx.lineWidth = cs * .7; ctx.stroke();
-  ctx.setLineDash([cs * .15, cs * .25]); ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
-  tdEmoji(ctx, '🌀', X(1.5), Y(.45), cs * .55);
-  tdEmoji(ctx, '🏰', X(5.5), Y(10.5), cs * .72);
 
-  // selection + range
+  // road: dark rim, body, lighter crown, cobbles, dashed centre line
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  tdRoad(ctx, X, Y); ctx.strokeStyle = '#120E22'; ctx.lineWidth = cs * .9; ctx.stroke();
+  tdRoad(ctx, X, Y); ctx.strokeStyle = '#4C3D6A'; ctx.lineWidth = cs * .78; ctx.stroke();
+  tdRoad(ctx, X, Y); ctx.strokeStyle = '#5C4B7E'; ctx.lineWidth = cs * .56; ctx.stroke();
+  for (let d = .3; d < TD_SEGS.total; d += .28) {
+    const [px, py] = tdPosAt(d);
+    ctx.fillStyle = `rgba(255,255,255,${.04 + rnd() * .05})`;
+    tdEllipse(ctx, X(px) + (rnd() - .5) * cs * .5, Y(py) + (rnd() - .5) * cs * .5, cs * (.05 + rnd() * .04), cs * .035); ctx.fill();
+  }
+  ctx.setLineDash([cs * .14, cs * .22]); tdRoad(ctx, X, Y);
+  ctx.strokeStyle = 'rgba(255,215,119,.16)'; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
+
+  // glows under portal and castle
+  const glow = (gx, gy, rad, col) => { const g = ctx.createRadialGradient(X(gx), Y(gy), 0, X(gx), Y(gy), rad * cs); g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(X(gx) - rad * cs, Y(gy) - rad * cs, rad * cs * 2, rad * cs * 2); };
+  glow(1.5, .5, 1.1, 'rgba(169,139,255,.45)');
+  glow(5.5, 10.4, 1.3, 'rgba(255,194,75,.35)');
+
+  // vignette
+  const v = ctx.createRadialGradient(TD.w / 2, TD.h / 2, Math.min(TD.w, TD.h) * .35, TD.w / 2, TD.h / 2, Math.max(TD.w, TD.h) * .75);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.45)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, TD.w, TD.h);
+  return cv;
+}
+function tdBurst(x, y, color, n, speed, life) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, v = speed * (.4 + Math.random() * .8);
+    TD.parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - speed * .3, c: color, t: life, life, r: .04 + Math.random() * .05 });
+  }
+}
+function tdBanner(text, sub, color) { TD.banner = { text, sub, c: color, t: 2.2, life: 2.2 }; }
+function tdDraw(dt) {
+  const ctx = TD.ctx, cs = TD.cs, X = gx => TD.ox + gx * cs, Y = gy => TD.oy + gy * cs, dpr = tdDpr();
+  const now = performance.now() / 1000;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, TD.w, TD.h);
+  if (TD.shake > 0) { const m = 9 * TD.shake / .35; ctx.translate((Math.random() - .5) * m, (Math.random() - .5) * m); }
+  ctx.drawImage(TD.bg, 0, 0, TD.w, TD.h);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  // portal (spinning) and castle (flashes red on a leak)
+  ctx.save(); ctx.translate(X(1.5), Y(.5)); ctx.rotate(now * 1.6); tdSpr(ctx, '🌀', 0, 0, cs * .55); ctx.restore();
+  const hit = Math.max(0, TD.castleHit || 0);
+  tdSpr(ctx, '🏰', X(5.5) + (hit ? (Math.random() - .5) * 4 : 0), Y(10.42), cs * .74, 1 + hit * .4, 1 - hit * .25);
+  if (hit) { ctx.fillStyle = `rgba(255,107,122,${hit * 1.2})`; tdEllipse(ctx, X(5.5), Y(10.45), cs * .45, cs * .4); ctx.fill(); }
+
+  // selection: pulsing frame + range of the selected tower
   if (TD.sel) {
-    const t = tdTowerAt(TD.sel.c, TD.sel.r);
-    ctx.strokeStyle = '#FFC24B'; ctx.lineWidth = 2.5;
-    tdRR(ctx, X(TD.sel.c) + 2, Y(TD.sel.r) + 2, cs - 4, cs - 4, cs * .18); ctx.stroke();
+    const t = tdTowerAt(TD.sel.c, TD.sel.r), pulse = .55 + .45 * Math.sin(now * 6);
     if (t) {
-      ctx.beginPath(); ctx.arc(X(t.x), Y(t.y), tdStat(t).range * cs, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,194,75,.08)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,194,75,.5)'; ctx.lineWidth = 1.5; ctx.stroke();
+      const rr = tdStat(t).range * cs;
+      ctx.beginPath(); ctx.arc(X(t.x), Y(t.y), rr, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,194,75,.07)'; ctx.fill();
+      ctx.setLineDash([6, 6]); ctx.lineDashOffset = -now * 20;
+      ctx.strokeStyle = 'rgba(255,194,75,.6)'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]);
+    } else {
+      tdSpr(ctx, '➕', X(TD.sel.c + .5), Y(TD.sel.r + .5), cs * .32);
     }
+    ctx.strokeStyle = `rgba(255,194,75,${pulse})`; ctx.lineWidth = 2.5;
+    tdRR(ctx, X(TD.sel.c) + 3, Y(TD.sel.r) + 3, cs - 6, cs - 6, cs * .2); ctx.stroke();
   }
-  // towers
+
+  // towers: shadow, clay pedestal, rotating barrel, emoji, level pips
   for (const t of TD.towers) {
-    const b = TD_TOWERS[t.type], s = cs * (1 - Math.max(0, t.recoil) * .6);
-    ctx.fillStyle = '#222D4E'; tdRR(ctx, X(t.x) - s * .42, Y(t.y) - s * .42, s * .84, s * .84, s * .22); ctx.fill();
-    ctx.strokeStyle = b.color; ctx.lineWidth = 2; ctx.stroke();
-    tdEmoji(ctx, b.ico, X(t.x), Y(t.y) - cs * .03, cs * .5);
+    const b = TD_TOWERS[t.type], tx = X(t.x), ty = Y(t.y), R = cs * .36;
+    const rec = Math.max(0, t.recoil || 0) / .12;
+    ctx.fillStyle = 'rgba(0,0,0,.4)'; tdEllipse(ctx, tx, ty + R * .8, R * .95, R * .35); ctx.fill();
+    const g = ctx.createRadialGradient(tx - R * .35, ty - R * .45, R * .1, tx, ty, R);
+    g.addColorStop(0, '#46588F'); g.addColorStop(1, '#1B2440');
+    ctx.beginPath(); ctx.arc(tx, ty, R, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
+    ctx.strokeStyle = b.color; ctx.globalAlpha = .25; ctx.lineWidth = 6; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.lineWidth = 2.2; ctx.stroke();
+    // barrel
+    const ang = t.ang ?? -Math.PI / 2, bl = R * (1.2 - rec * .25);
+    ctx.save(); ctx.translate(tx, ty); ctx.rotate(ang);
+    tdRR(ctx, R * .62, -R * .16, bl - R * .5, R * .32, R * .12); ctx.fillStyle = '#0F1530'; ctx.fill();
+    ctx.strokeStyle = b.color; ctx.lineWidth = 1.5; ctx.stroke();
+    if ((t.muzzle || 0) > 0) {
+      ctx.globalAlpha = t.muzzle / .08;
+      ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(bl + R * .12, 0, R * .22, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(bl + R * .12, 0, R * .1, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+    tdSpr(ctx, b.ico, tx, ty - rec * 2, cs * .44, 1 + rec * .12, 1 - rec * .1);
     for (let i = 0; i < t.lvl; i++) {
-      ctx.beginPath(); ctx.arc(X(t.x) + (i - (t.lvl - 1) / 2) * cs * .16, Y(t.y) + cs * .33, cs * .05, 0, Math.PI * 2);
-      ctx.fillStyle = '#FFC24B'; ctx.fill();
+      const px = tx + (i - (t.lvl - 1) / 2) * R * .42, py = ty + R * 1.02;
+      ctx.beginPath(); ctx.moveTo(px, py - R * .14); ctx.lineTo(px + R * .12, py); ctx.lineTo(px, py + R * .14); ctx.lineTo(px - R * .12, py); ctx.closePath();
+      ctx.fillStyle = '#FFC24B'; ctx.fill(); ctx.strokeStyle = '#3A2700'; ctx.lineWidth = 1; ctx.stroke();
     }
   }
-  // enemies
-  for (const e of TD.enemies) {
-    const d = TD_ENEMIES[e.type], ex = X(e.x), ey = Y(e.y);
-    if (e.slowT > 0) { ctx.beginPath(); ctx.arc(ex, ey, cs * d.size * .55, 0, Math.PI * 2); ctx.fillStyle = 'rgba(91,168,255,.35)'; ctx.fill(); }
-    ctx.globalAlpha = e.flash > 0 ? .55 : 1;
-    tdEmoji(ctx, d.ico, ex, ey, cs * d.size);
-    ctx.globalAlpha = 1;
-    const bw = cs * Math.max(.5, d.size), by = ey - cs * d.size * .62;
-    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(ex - bw / 2, by, bw, 4);
-    ctx.fillStyle = e.hp / e.maxhp > .4 ? '#4FE0A0' : '#FF6B7A'; ctx.fillRect(ex - bw / 2, by, bw * Math.max(0, e.hp / e.maxhp), 4);
+
+  // enemies (back to front): shadow, aura, bobbing sprite, hp bar
+  const es = TD.enemies.slice().sort((a, b) => a.y - b.y);
+  for (const e of es) {
+    const d = TD_ENEMIES[e.type], ex = X(e.x), ey = Y(e.y), sz = cs * d.size;
+    const step = Math.sin((TD.anim || 0) * e.speed * 9 + e.id);
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; tdEllipse(ctx, ex, ey + sz * .4, sz * .36 * (1 - step * .08), sz * .12); ctx.fill();
+    if (e.type === 'boss') {
+      const a = ctx.createRadialGradient(ex, ey, 0, ex, ey, sz * .9);
+      a.addColorStop(0, `rgba(255,107,122,${.35 + .15 * Math.sin(now * 5)})`); a.addColorStop(1, 'rgba(255,107,122,0)');
+      ctx.fillStyle = a; ctx.fillRect(ex - sz, ey - sz, sz * 2, sz * 2);
+    }
+    if (e.slowT > 0) {
+      ctx.strokeStyle = 'rgba(140,200,255,.85)'; ctx.lineWidth = 2;
+      tdEllipse(ctx, ex, ey + sz * .32, sz * .42, sz * .15); ctx.stroke();
+      ctx.fillStyle = 'rgba(91,168,255,.22)'; ctx.fill();
+    }
+    const punch = e.flash > 0 ? 1.15 : 1;
+    tdSpr(ctx, d.ico, ex, ey - Math.abs(step) * cs * .05, sz, punch * (1 + step * .04), punch * (1 - step * .04));
+    if (e.hp < e.maxhp) {
+      const bw = Math.max(cs * .5, sz * .9), bh = Math.max(4, cs * .07), bx = ex - bw / 2, by = ey - sz * .62 - bh;
+      const k = Math.max(0, e.hp / e.maxhp);
+      tdRR(ctx, bx - 1, by - 1, bw + 2, bh + 2, (bh + 2) / 2); ctx.fillStyle = 'rgba(5,8,18,.8)'; ctx.fill();
+      if (k > 0) { tdRR(ctx, bx, by, Math.max(bh, bw * k), bh, bh / 2); ctx.fillStyle = k > .5 ? '#4FE0A0' : k > .25 ? '#FFC24B' : '#FF6B7A'; ctx.fill(); }
+      if (d.armor) tdSpr(ctx, '🛡️', bx - bh * 1.3, by + bh / 2, bh * 2.4);
+    }
   }
-  // projectiles
+
+  // projectiles with a short glowing trail
   for (const s of TD.shots) {
-    ctx.beginPath(); ctx.arc(X(s.x), Y(s.y), Math.max(3, cs * .07), 0, Math.PI * 2);
-    ctx.fillStyle = TD_TOWERS[s.type].color; ctx.fill();
+    const b = TD_TOWERS[s.type], sx = X(s.x), sy = Y(s.y), r = Math.max(3, cs * .07);
+    if (s.px != null) {
+      ctx.strokeStyle = b.color; ctx.globalAlpha = .45; ctx.lineWidth = r * 1.4;
+      ctx.beginPath(); ctx.moveTo(X(s.px), Y(s.py)); ctx.lineTo(sx, sy); ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    ctx.globalAlpha = .3; ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(sx, sy, r * 2, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx, sy, r * .45, 0, Math.PI * 2); ctx.fill();
   }
-  // fx
+
+  // particles
+  for (const p of TD.parts) {
+    ctx.globalAlpha = Math.max(0, p.t / p.life);
+    ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(X(p.x), Y(p.y), p.r * cs * (.5 + .5 * p.t / p.life), 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // effects
   for (const f of TD.fx) {
-    const k = f.t / f.life;
-    ctx.globalAlpha = Math.max(0, k);
+    const k = Math.max(0, f.t / f.life), ease = 1 - k * k;
+    ctx.globalAlpha = k;
     if (f.k === 'ring') {
-      ctx.beginPath(); ctx.arc(X(f.x), Y(f.y), f.r * cs * (1.1 - k * .6), 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(X(f.x), Y(f.y), f.r * cs * (.3 + ease * .8), 0, Math.PI * 2);
+      ctx.fillStyle = f.c; ctx.globalAlpha = k * .18; ctx.fill(); ctx.globalAlpha = k;
       ctx.strokeStyle = f.c; ctx.lineWidth = 3; ctx.stroke();
     } else if (f.k === 'line') {
       ctx.beginPath(); ctx.moveTo(X(f.x1), Y(f.y1)); ctx.lineTo(X(f.x2), Y(f.y2));
-      ctx.strokeStyle = f.c; ctx.lineWidth = 3; ctx.stroke();
+      ctx.strokeStyle = f.c; ctx.lineWidth = 7; ctx.globalAlpha = k * .35; ctx.stroke();
+      ctx.globalAlpha = k; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+    } else if (f.k === 'pop') {
+      tdSpr(ctx, f.ico, X(f.x), Y(f.y) - ease * cs * .2, f.sz * cs, 1 + ease * .7, 1 + ease * .7);
     } else {
-      ctx.font = `700 ${Math.round(cs * .28)}px 'Chakra Petch',sans-serif`;
-      ctx.fillStyle = f.c; ctx.fillText(f.text, X(f.x), Y(f.y) - (1 - k) * cs * .6);
+      ctx.font = `700 ${Math.round(cs * .3)}px 'Chakra Petch',sans-serif`;
+      const ty = Y(f.y) - ease * cs * .7;
+      ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(5,8,18,.9)'; ctx.strokeText(f.text, X(f.x), ty);
+      ctx.fillStyle = f.c; ctx.fillText(f.text, X(f.x), ty);
     }
-    ctx.globalAlpha = 1;
+  }
+  ctx.globalAlpha = 1;
+
+  // fireflies drift over the board
+  for (const fl of TD.flies) {
+    fl.ph += dt * fl.sp * 3; fl.y -= dt * fl.sp * .3; if (fl.y < -.3) { fl.y = TD_ROWS + .3; fl.x = Math.random() * TD_COLS; }
+    const fx = X(fl.x + Math.sin(fl.ph) * .3), fy = Y(fl.y);
+    ctx.globalAlpha = .25 + .35 * (.5 + .5 * Math.sin(fl.ph * 2.3));
+    ctx.fillStyle = '#FFD777'; ctx.beginPath(); ctx.arc(fx, fy, 1.6, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha *= .3; ctx.beginPath(); ctx.arc(fx, fy, 5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // wave banner (scales in, holds, fades out)
+  const bn = TD.banner;
+  if (bn) {
+    bn.t -= dt; if (bn.t <= 0) TD.banner = null;
+    const age = bn.life - bn.t, inK = Math.min(1, age / .25), outK = Math.min(1, bn.t / .4);
+    const sc = .7 + .3 * (1 - Math.pow(1 - inK, 3)), cx = TD.w / 2, cy = Y(4);
+    ctx.save(); ctx.globalAlpha = Math.min(inK, outK); ctx.translate(cx, cy); ctx.scale(sc, sc);
+    const bw = Math.min(TD.w - 32, 300), bh = bn.sub ? 76 : 56;
+    tdRR(ctx, -bw / 2, -bh / 2, bw, bh, 20); ctx.fillStyle = 'rgba(11,16,32,.9)'; ctx.fill();
+    ctx.strokeStyle = bn.c; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = bn.c; ctx.font = `700 26px 'Chakra Petch',sans-serif`;
+    ctx.fillText(bn.text, 0, bn.sub ? -12 : 1);
+    if (bn.sub) { ctx.fillStyle = '#A6B8DF'; ctx.font = `600 13px Inter,sans-serif`; ctx.fillText(bn.sub, 0, 18); }
+    ctx.restore();
   }
 }
 window.addEventListener('resize', () => { if (TD) tdLayout(); });
