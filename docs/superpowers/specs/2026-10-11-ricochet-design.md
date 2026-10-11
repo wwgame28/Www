@@ -8,8 +8,8 @@ Date: 2026-10-11 · Status: approved in chat ("делай как считаеш�
 - **Success:** opens from a link in iPhone Safari, playable one-handed, 1–3 min runs, a friend can open a shared link and play the exact same daily run to beat a score.
 
 ## Platform
-- Web game in `ricochet/` (separate from Walk Wars `Index.html`, which is untouched).
-- three.js r169 vendored in `ricochet/vendor/` (no CDN, no build step), ES modules + import map.
+- Web game at the repository root (Walk Wars was removed on the owner's request; it remains in git history).
+- three.js r169 vendored in `vendor/` (no CDN, no build step), ES modules + import map.
 - Portrait first; landscape works. Honors iPhone safe areas.
 - Hosting (e.g. GitHub Pages) only after the owner confirms — it is a publication.
 
@@ -62,14 +62,14 @@ Obstacle layout is fixed per location (seeded by location id) so runs are compar
 
 ## Daily challenge and sharing
 - Daily seed = `YYYY-MM-DD`; it picks location and weapon (ignoring locks) and drives waves.
-- Share link: `…/ricochet/#c=<base64url JSON {d,l,w,s,b,v}>` (date, location, weapon, score, best combo, wave). Opening it shows "<score> — побей!" and offers that exact run.
+- Share link: `…/#c=<base64url JSON {d,l,w,s,b,v}>` (date, location, weapon, score, best combo, wave). Opening it shows "<score> — побей!" and offers that exact run.
 - Uses the iOS share sheet (`navigator.share`), falls back to copying to the clipboard.
 
 ## Screens
 Menu (3D scene behind, Play / Daily / Arsenal / Locations, settings icon) · Arsenal (rotating blaster, animated trajectory preview, lock + condition) · Locations (cards with best score, lock) · HUD (score, wave, combo pop-ups, projectile indicator + off-screen arrow, pause) · Pause · Game over (score, best combo, wave, "Новый рекорд!", Share, Again, Menu) · Settings (sound, music, quality low/high, left-handed).
 
 ## Assets
-All Kenney, CC0 (verified in each `License.txt`). Copied into `ricochet/assets/<kit>/` — only the models used, plus their `Textures/`. Skybox downscaled to 2048×1024 for the menu. Sounds are synthesized with Web Audio (no audio pack uploaded yet). Sources listed in `ricochet/CREDITS.md`.
+All Kenney, CC0 (verified in each `License.txt`). Copied into `assets/<kit>/` — only the models used, plus their `Textures/`. Skybox downscaled to 2048×1024 for the menu. Sounds are synthesized with Web Audio (no audio pack uploaded yet). Sources listed in `CREDITS.md`.
 
 ## Architecture
 Simulation is plain JS with no three.js dependency, so it is unit-testable:
@@ -95,7 +95,7 @@ Presentation:
 - Loop and audio paused on `visibilitychange`; no per-frame allocations in hot paths.
 
 ## Testing
-- `node --test ricochet/tests/`: RNG determinism, wave determinism, each weapon's trajectory invariants, kill/combo/catch scoring, pickup, share round-trip.
+- `node --test tests/*.test.mjs`: RNG determinism, wave determinism, each weapon's trajectory invariants, kill/combo/catch scoring, pickup, share round-trip.
 - Playwright (Chromium, iPhone 14 profile, served locally): menu renders, a run starts, taps fire, no console errors, screenshots in portrait.
 - Real-device check is the owner's (Safari on iPhone); emulation results are reported as emulation.
 
