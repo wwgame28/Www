@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Рикошет">
+<meta name="theme-color" content="#14182b">
+<title>Рикошет</title>
+<link rel="apple-touch-icon" href="assets/ui/blaster-a.png">
+<style>
+  :root {
+    --ink: #14182b;
+    --panel: rgba(20, 24, 43, 0.86);
+    --panel-solid: #1e2440;
+    --line: rgba(255, 255, 255, 0.12);
+    --text: #ffffff;
+    --muted: #a9b1d6;
+    --gold: #ffd34d;
+    --gold-dark: #c99a12;
+    --coral: #ff6b6b;
+    --coral-dark: #c74646;
+    --sky: #5fd0ff;
+    --sky-dark: #2f93c4;
+    --green: #7ee07a;
+    --radius: 18px;
+    --font: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--ink); color: var(--text); font-family: var(--font); overflow: hidden; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  #game { position: fixed; inset: 0; width: 100vw; height: 100dvh; display: block; touch-action: none; }
+
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; padding: calc(16px + var(--safe-t)) calc(16px + var(--safe-r)) calc(16px + var(--safe-b)) calc(16px + var(--safe-l)); opacity: 0; pointer-events: none; transform: translateY(12px); transition: opacity .22s cubic-bezier(.2,.8,.2,1), transform .22s cubic-bezier(.2,.8,.2,1); }
+  .screen.on { opacity: 1; pointer-events: auto; transform: none; }
+  .screen.dim { background: linear-gradient(180deg, rgba(20,24,43,.55), rgba(20,24,43,.35) 45%, rgba(20,24,43,.9)); }
+  .scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1; margin: 0 -4px; padding: 0 4px 8px; }
+
+  h1, h2, h3, p { margin: 0; }
+  .logo { font-size: clamp(44px, 14vw, 64px); font-weight: 900; letter-spacing: .02em; line-height: .95; text-align: center; color: var(--gold); text-shadow: 0 4px 0 var(--gold-dark), 0 10px 24px rgba(0,0,0,.45); transform: rotate(-3deg); }
+  .tagline { margin-top: 10px; text-align: center; color: var(--muted); font-weight: 700; font-size: 15px; }
+  .topbar { display: flex; align-items: center; gap: 12px; min-height: 48px; }
+  .topbar h2 { flex: 1; font-size: 24px; font-weight: 900; }
+  .spacer { flex: 1; }
+
+  .btn { appearance: none; border: 0; border-radius: var(--radius); font: inherit; font-weight: 900; color: var(--ink); background: var(--gold); box-shadow: inset 0 -5px 0 var(--gold-dark), 0 6px 16px rgba(0,0,0,.25); min-height: 56px; padding: 0 22px 5px; font-size: 19px; cursor: pointer; transition: transform .08s ease, box-shadow .08s ease, filter .08s; touch-action: manipulation; display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+  .btn:active { transform: translateY(3px) scale(.98); box-shadow: inset 0 -2px 0 var(--gold-dark), 0 2px 6px rgba(0,0,0,.25); }
+  .btn.big { min-height: 72px; font-size: 26px; border-radius: 22px; }
+  .btn.coral { background: var(--coral); color: #fff; box-shadow: inset 0 -5px 0 var(--coral-dark), 0 6px 16px rgba(0,0,0,.25); }
+  .btn.sky { background: var(--sky); box-shadow: inset 0 -5px 0 var(--sky-dark), 0 6px 16px rgba(0,0,0,.25); }
+  .btn.ghost { background: rgba(255,255,255,.1); color: #fff; box-shadow: inset 0 -4px 0 rgba(0,0,0,.25); }
+  .btn.icon { width: 48px; min-height: 48px; padding: 0 0 4px; font-size: 22px; border-radius: 14px; }
+  .btn[disabled] { filter: grayscale(.8) brightness(.7); pointer-events: none; }
+  .stack { display: grid; gap: 12px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .sub { display: block; font-size: 13px; font-weight: 700; opacity: .7; margin-top: 2px; }
+  .btn .twol { display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.1); border-radius: 999px; padding: 6px 12px; font-weight: 800; font-size: 14px; }
+  .chip img { width: 22px; height: 22px; image-rendering: pixelated; }
+
+  #menu .hero { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  #menu .loadout { display: flex; justify-content: center; gap: 8px; margin: 18px 0 14px; flex-wrap: wrap; }
+  #challenge { margin-bottom: 12px; display: none; border-color: rgba(255,211,77,.5); }
+  #challenge.on { display: block; animation: pop .4s cubic-bezier(.2,.8,.2,1); }
+  #challenge b { color: var(--gold); }
+
+  .list { display: grid; gap: 10px; }
+  .item { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 12px; padding: 12px; border-radius: var(--radius); background: var(--panel); border: 2px solid transparent; transition: transform .08s, border-color .15s; }
+  .item:active { transform: scale(.98); }
+  .item.sel { border-color: var(--gold); }
+  .item.locked { opacity: .55; }
+  .item .pic { width: 64px; height: 64px; border-radius: 14px; background: rgba(255,255,255,.08); display: grid; place-items: center; overflow: hidden; }
+  .item .pic img { width: 56px; height: 56px; image-rendering: pixelated; }
+  .item h3 { font-size: 18px; font-weight: 900; }
+  .item p { color: var(--muted); font-size: 13px; font-weight: 700; margin-top: 2px; }
+  .item canvas { width: 54px; height: 72px; }
+  .lock { font-size: 12px; font-weight: 800; color: var(--gold); }
+
+  #hud { padding: 0; }
+  #hud.on { pointer-events: none; } /* touches go to the canvas; only the pause button is clickable */
+  #hud .top { position: absolute; top: calc(8px + var(--safe-t)); left: calc(12px + var(--safe-l)); right: calc(12px + var(--safe-r)); display: flex; align-items: flex-start; gap: 10px; pointer-events: none; }
+  #hud .tally { background: rgba(20,24,43,.55); border-radius: 16px; padding: 8px 14px 8px; }
+  #hud .score { font-size: 36px; font-weight: 900; line-height: 1; }
+  #hud .wave { font-size: 14px; font-weight: 800; color: var(--gold); margin-top: 2px; }
+  #hud .btn.ghost { background: rgba(20,24,43,.55); }
+  #hud .mult { display: none; margin-top: 6px; }
+  #hud .mult.on { display: inline-flex; background: var(--gold); color: var(--ink); animation: pulse .6s infinite alternate; }
+  #pauseBtn { pointer-events: auto; }
+  #ammo { position: absolute; left: 50%; bottom: calc(16px + var(--safe-b)); transform: translateX(-50%); pointer-events: none; background: rgba(20,24,43,.7); transition: background .15s, color .15s; }
+  #ammo.empty { background: var(--coral); color: #fff; animation: pulse-x .5s infinite alternate; }
+  @keyframes pulse-x { from { transform: translateX(-50%); } to { transform: translateX(-50%) scale(1.06); } }
+  #arrow { position: absolute; width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-bottom: 22px solid var(--gold); filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); display: none; pointer-events: none; }
+  #stick { position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 3px solid rgba(255,255,255,.35); background: rgba(255,255,255,.08); display: none; pointer-events: none; }
+  #stick i { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: rgba(255,255,255,.7); }
+  #aim { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; background: url(assets/ui/crosshair.svg) center/contain no-repeat; pointer-events: none; opacity: 0; }
+  #aim.go { animation: aim .45s ease-out; }
+  #banner { position: absolute; left: 0; right: 0; top: 34%; text-align: center; font-size: 34px; font-weight: 900; color: var(--gold); text-shadow: 0 4px 0 var(--gold-dark), 0 8px 20px rgba(0,0,0,.5); pointer-events: none; opacity: 0; }
+  #banner.go { animation: banner 1.4s cubic-bezier(.2,.8,.2,1); }
+  #hint { position: absolute; left: 50%; bottom: calc(76px + var(--safe-b)); transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); text-align: center; color: #fff; font-weight: 800; font-size: 15px; background: rgba(20,24,43,.7); padding: 10px 16px; border-radius: 14px; pointer-events: none; transition: opacity .4s; }
+  .pop { position: absolute; transform: translate(-50%, -50%); font-weight: 900; font-size: 22px; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.45); pointer-events: none; animation: rise .8s ease-out forwards; white-space: nowrap; }
+  .pop.combo { color: var(--gold); font-size: 28px; }
+
+  #over .card { margin: auto 0; text-align: center; animation: pop .45s cubic-bezier(.2,.8,.2,1); }
+  #over .big-score { font-size: 72px; font-weight: 900; color: var(--gold); line-height: 1; margin: 6px 0; text-shadow: 0 4px 0 var(--gold-dark); }
+  #over .record { display: none; margin: 4px auto 8px; background: var(--coral); color: #fff; }
+  #over .record.on { display: inline-flex; animation: pulse .5s infinite alternate; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
+  .stat { background: rgba(255,255,255,.07); border-radius: 14px; padding: 10px; }
+  .stat b { display: block; font-size: 26px; }
+  .stat span { color: var(--muted); font-size: 13px; font-weight: 800; }
+  #vs { font-weight: 800; margin-bottom: 12px; display: none; }
+  #vs.on { display: block; }
+
+  .setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border-radius: var(--radius); background: var(--panel); font-weight: 800; font-size: 17px; }
+  .toggle { width: 60px; height: 36px; border-radius: 999px; background: rgba(255,255,255,.18); position: relative; border: 0; transition: background .15s; }
+  .toggle::after { content: ""; position: absolute; top: 4px; left: 4px; width: 28px; height: 28px; border-radius: 50%; background: #fff; transition: transform .18s cubic-bezier(.2,.8,.2,1); }
+  .toggle.on { background: var(--green); }
+  .toggle.on::after { transform: translateX(24px); }
+  .note { color: var(--muted); font-size: 13px; font-weight: 700; padding: 4px 6px; }
+
+  #loading { align-items: center; justify-content: center; gap: 18px; background: var(--ink); }
+  .spinner { width: 46px; height: 46px; border-radius: 50%; border: 5px solid rgba(255,255,255,.15); border-top-color: var(--gold); animation: spin .8s linear infinite; }
+  #toast { position: fixed; left: 50%; bottom: calc(24px + var(--safe-b)); transform: translate(-50%, 20px); background: var(--panel-solid); padding: 12px 18px; border-radius: 14px; font-weight: 800; opacity: 0; transition: .25s; pointer-events: none; }
+  #toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pop { from { transform: scale(.85); opacity: 0; } }
+  @keyframes pulse { to { transform: scale(1.06); } }
+  @keyframes rise { 0% { opacity: 0; transform: translate(-50%, -30%) scale(.7); } 20% { opacity: 1; transform: translate(-50%, -60%) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -160%) scale(1); } }
+  @keyframes banner { 0% { opacity: 0; transform: scale(.6); } 20% { opacity: 1; transform: scale(1.08); } 30% { transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes aim { 0% { opacity: 1; transform: scale(1.4); } 100% { opacity: 0; transform: scale(.8); } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  }
+  @media (min-width: 600px) { .screen > * { width: 100%; max-width: 460px; margin-left: auto; margin-right: auto; } }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js", "three/addons/": "./vendor/addons/" } }
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<section id="loading" class="screen on" aria-live="polite">
+  <div class="logo">РИКОШЕТ</div>
+  <div class="spinner" aria-hidden="true"></div>
+  <p id="loadingText" class="tagline">Загрузка…</p>
+</section>
+
+<section id="menu" class="screen dim">
+  <div class="topbar"><span class="spacer"></span><button class="btn icon ghost" data-go="settings" aria-label="Настройки">⚙︎</button></div>
+  <div class="hero">
+    <div class="logo">РИКОШЕТ</div>
+    <p class="tagline">Одна пуля. Верни её — или конец.</p>
+    <div class="loadout">
+      <span class="chip"><img id="menuWeaponPic" alt=""><span id="menuWeapon"></span></span>
+      <span class="chip">📍 <span id="menuLocation"></span></span>
+      <span class="chip">🏆 <span id="menuBest">0</span></span>
+    </div>
+  </div>
+  <div id="challenge" class="card"><p id="challengeText"></p><button id="challengeBtn" class="btn coral" style="width:100%;margin-top:10px">Принять вызов</button></div>
+  <div class="stack">
+    <button id="playBtn" class="btn big">Играть</button>
+    <button id="dailyBtn" class="btn sky"><span class="twol">Вызов дня<span id="dailySub" class="sub"></span></span></button>
+    <div class="row">
+      <button class="btn ghost" data-go="arsenal">🔫 Арсенал</button>
+      <button class="btn ghost" data-go="locations">🗺 Локации</button>
+    </div>
+  </div>
+</section>
+
+<section id="arsenal" class="screen dim">
+  <div class="topbar"><button class="btn icon ghost" data-go="menu" aria-label="Назад">‹</button><h2>Арсенал</h2></div>
+  <p class="note">Траектория — главное отличие оружия. Открывается по лучшему счёту.</p>
+  <div class="scroll"><div id="weaponList" class="list"></div></div>
+</section>
+
+<section id="locations" class="screen dim">
+  <div class="topbar"><button class="btn icon ghost" data-go="menu" aria-label="Назад">‹</button><h2>Локации</h2></div>
+  <p class="note">Новые локации открываются по лучшей волне.</p>
+  <div class="scroll"><div id="locationList" class="list"></div></div>
+</section>
+
+<section id="settings" class="screen dim">
+  <div class="topbar"><button class="btn icon ghost" data-go="menu" aria-label="Назад">‹</button><h2>Настройки</h2></div>
+  <div class="stack">
+    <div class="setting">Звук <button id="soundToggle" class="toggle" aria-label="Звук"></button></div>
+    <div class="setting">Красивая графика <button id="qualityToggle" class="toggle" aria-label="Качество графики"></button></div>
+    <p class="note">Выключите красивую графику, если iPhone греется или садится батарея. Применится после перезапуска.</p>
+    <p class="note">Модели и небо: Kenney (kenney.nl), CC0.</p>
+  </div>
+</section>
+
+<section id="hud" class="screen">
+  <div class="top">
+    <div><div class="tally"><div id="score" class="score">0</div><div id="wave" class="wave">Волна 1</div></div><span id="mult" class="chip mult">×2 следующий выстрел</span></div>
+    <span class="spacer"></span>
+    <button id="pauseBtn" class="btn icon ghost" aria-label="Пауза">❚❚</button>
+  </div>
+  <div id="stick"><i></i></div>
+  <div id="aim"></div>
+  <div id="arrow"></div>
+  <div id="banner"></div>
+  <div id="hint">Веди пальцем — бежать. Тап — выстрел.</div>
+  <span id="ammo" class="chip">● В руке</span>
+  <div id="pops"></div>
+</section>
+
+<section id="pause" class="screen dim">
+  <div class="card stack" style="margin:auto 0">
+    <h2 style="text-align:center;font-size:28px;font-weight:900">Пауза</h2>
+    <button id="resumeBtn" class="btn big">Продолжить</button>
+    <button id="restartBtn" class="btn ghost">Заново</button>
+    <button id="quitBtn" class="btn ghost">В меню</button>
+  </div>
+</section>
+
+<section id="over" class="screen dim">
+  <div class="card">
+    <p class="tagline" id="overTitle">Забег окончен</p>
+    <div id="overScore" class="big-score">0</div>
+    <span id="overRecord" class="chip record">Новый рекорд!</span>
+    <div class="stats">
+      <div class="stat"><b id="overCombo">0</b><span>лучшее комбо</span></div>
+      <div class="stat"><b id="overWave">0</b><span>волна</span></div>
+    </div>
+    <p id="vs"></p>
+    <div class="stack">
+      <button id="shareBtn" class="btn coral">Бросить вызов другу</button>
+      <div class="row">
+        <button id="againBtn" class="btn">Ещё раз</button>
+        <button id="menuBtn" class="btn ghost">Меню</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div id="toast"></div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
