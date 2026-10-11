@@ -9,7 +9,8 @@
 <meta name="apple-mobile-web-app-title" content="Рикошет">
 <meta name="theme-color" content="#14182b">
 <title>Рикошет</title>
-<link rel="apple-touch-icon" href="assets/ui/blaster-a.png">
+<link rel="apple-touch-icon" href="assets/ui/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
 <style>
   :root {
     --ink: #14182b;
@@ -156,6 +157,14 @@
   #toast { position: fixed; left: 50%; bottom: calc(24px + var(--safe-b)); transform: translate(-50%, 20px); background: var(--panel-solid); padding: 12px 18px; border-radius: 14px; font-weight: 800; opacity: 0; transition: .25s; pointer-events: none; }
   #toast.on { opacity: 1; transform: translate(-50%, 0); }
 
+  /* The game is portrait-only. iOS can't lock orientation from a web page, so in landscape
+     a full-screen prompt covers everything (and the game pauses — see main.js). */
+  #rotate { position: fixed; inset: 0; z-index: 50; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; background: var(--ink); }
+  #rotate .phone { width: 46px; height: 80px; border: 5px solid var(--gold); border-radius: 12px; animation: turn 1.6s ease-in-out infinite; }
+  #rotate h2 { font-size: 24px; font-weight: 900; }
+  #rotate p { color: var(--muted); font-weight: 700; font-size: 15px; max-width: 360px; }
+  @media (orientation: landscape) and (max-height: 520px) { #rotate { display: flex; } }
+  @keyframes turn { 0%, 20% { transform: rotate(-90deg); } 60%, 100% { transform: rotate(0deg); } }
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes pop { from { transform: scale(.85); opacity: 0; } }
   @keyframes pulse { to { transform: scale(1.06); } }
@@ -279,6 +288,11 @@
 </section>
 
 <div id="toast"></div>
+<div id="rotate" role="alert">
+  <div class="phone" aria-hidden="true"></div>
+  <h2>Поверните телефон вертикально</h2>
+  <p>Рикошет играется в портретном режиме. Чтобы экран не поворачивался сам, включите «Блокировку ориентации» в Пункте управления.</p>
+</div>
 <script type="module" src="src/main.js"></script>
 </body>
 </html>

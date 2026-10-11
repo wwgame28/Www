@@ -91,6 +91,7 @@ async function toMenu() {
 // ---------- run ----------
 async function start(kind) {
   audio.unlock();
+  screen.orientation?.lock?.('portrait').catch(() => {}); // Android / installed apps; iOS rejects it
   if (kind === 'free') {
     run = { kind, seed: `free:${Date.now()}`, locationId: data.location, weaponId: data.weapon };
   } else if (kind === 'daily') {
@@ -345,6 +346,9 @@ addEventListener('hashchange', () => { challenge = challengeFromHash(location.ha
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { pause(); audio.suspend(); } else { audio.resume(); last = performance.now(); }
 });
+// Portrait only: turning the phone sideways shows the #rotate prompt (CSS) and pauses the run.
+const landscape = matchMedia('(orientation: landscape) and (max-height: 520px)');
+landscape.addEventListener('change', (e) => { if (e.matches) pause(); });
 
 view.resize();
 requestAnimationFrame(frame);
