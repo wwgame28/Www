@@ -7,11 +7,11 @@ const HERO_SPEED = 5.2;
 const HERO_R = 0.4;
 const WAVE_BREAK = 1.6;
 
-export function createGame({ seed, locationId, weaponId }) {
+export function createGame({ seed, locationId, weaponId, heroId = null }) {
   const loc = getLocation(locationId);
   const { solids, decor } = layoutFor(loc);
   const g = {
-    seed, loc, weapon: getWeapon(weaponId), solids, decor, arena: ARENA,
+    seed, loc, weapon: getWeapon(weaponId), heroId, solids, decor, arena: ARENA,
     hero: { x: 0, z: 3, vx: 0, vz: 0, r: HERO_R, facing: Math.PI, moving: 0 },
     projectile: { state: 'held', x: 0, z: 3, vx: 0, vz: 0, hits: new Set(), events: [] },
     enemies: [], nextId: 1,
@@ -32,13 +32,16 @@ function startWave(g) {
   emit(g, 'wave', { wave: g.wave });
 }
 
-function spawnPos(g, s) {
+// Walkers rise out of the ground just inside the walls; flyers come in from outside.
+const RISE_TIME = 0.9;
+function spawnPos(g, s, flying) {
   const { W, D } = g.arena;
+  const k = flying ? 0.6 : -0.9;
   switch (s.side) {
-    case 'left': return { x: -W - 0.6, z: s.along * D };
-    case 'right': return { x: W + 0.6, z: s.along * D };
-    case 'bottom': return { x: s.along * W, z: D + 0.6 };
-    default: return { x: s.along * W, z: -D - 0.6 };
+    case 'left': return { x: -W - k, z: s.along * D };
+    case 'right': return { x: W + k, z: s.along * D };
+    case 'bottom': return { x: s.along * W, z: D + k };
+    default: return { x: s.along * W, z: -D - k };
   }
 }
 
@@ -46,7 +49,7 @@ function addEnemy(g, type, x, z, model) {
   const def = ENEMY_TYPES[type];
   const e = {
     id: g.nextId++, type, model: model || def.model[0], x, z, r: def.r, hp: def.hp,
-    speed: def.speed * speedFactor(g.wave), flying: !!def.flying, dead: false, facing: 0, hurtT: 0,
+    speed: def.speed * speedFactor(g.wave), flying: !!def.flying, dead: false, facing: 0, hurtT: 0, rise: 0,
   };
   g.enemies.push(e);
   return e;
@@ -173,8 +176,10 @@ export function step(g, dt, input = {}) {
     g.waveT += dt;
     while (g.queue.length && g.queue[0].at <= g.waveT) {
       const s = g.queue.shift();
-      const pos = spawnPos(g, s);
-      addEnemy(g, s.type, pos.x, pos.z, s.model);
+      const flying = !!ENEMY_TYPES[s.type].flying;
+      const pos = spawnPos(g, s, flying);
+      const e = addEnemy(g, s.type, pos.x, pos.z, s.model);
+      if (!flying) e.rise = RISE_TIME; // harmless and still while climbing out of the ground
     }
   }
 
@@ -184,6 +189,7 @@ export function step(g, dt, input = {}) {
     if (e.dead) continue;
     e.hurtT = Math.max(0, e.hurtT - dt);
     const dx = h.x - e.x, dz = h.z - e.z, d = Math.hypot(dx, dz) || 1;
+    if (e.rise > 0) { e.rise = Math.max(0, e.rise - dt); e.facing = Math.atan2(dx, dz); continue; }
     const sp = e.speed * (!e.flying && inRiver(g, e.z) ? rule.river.slow : 1);
     e.x += (dx / d) * sp * dt; e.z += (dz / d) * sp * dt;
     e.facing = Math.atan2(dx, dz);
@@ -232,5 +238,5 @@ export function choosePerk(g, id) {
 }
 
 export function result(g) {
-  return { score: g.score, combo: g.bestCombo, wave: g.wave, location: g.loc.id, weapon: g.weapon.id };
+  return { score: g.score, combo: g.bestCombo, wave: g.wave, location: g.loc.id, weapon: g.weapon.id, hero: g.heroId };
 }

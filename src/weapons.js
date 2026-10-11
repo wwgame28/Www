@@ -25,6 +25,12 @@ export function bounce(p, world) {
   const { W, D } = world.arena;
   const PR = p.r || PROJECTILE_R;
   let hit = false;
+  if (world.rule?.wrap) {
+    // Portal walls: leave through one side, come back through the opposite one (counts as a bounce).
+    if (p.x < -W + PR) { p.x = W - PR; hit = true; } else if (p.x > W - PR) { p.x = -W + PR; hit = true; }
+    if (p.z < -D + PR) { p.z = D - PR; hit = true; } else if (p.z > D - PR) { p.z = -D + PR; hit = true; }
+    if (hit) p.portal = true;
+  }
   if (p.x < -W + PR) { p.x = -W + PR; p.vx = Math.abs(p.vx); hit = true; }
   if (p.x > W - PR) { p.x = W - PR; p.vx = -Math.abs(p.vx); hit = true; }
   if (p.z < -D + PR) { p.z = -D + PR; p.vz = Math.abs(p.vz); hit = true; }

@@ -1,13 +1,20 @@
-import { WEAPONS } from './weapons.js';
-import { LOCATIONS } from './locations.js';
+import { HEROES, getHero } from './heroes.js';
+import { LOCATIONS, getLocation } from './locations.js';
 
 const KEY = 'ricochet:v1';
-const blank = () => ({ best: {}, bestWave: 0, bestScore: 0, daily: {}, settings: { sound: true, quality: 'high', leftHanded: false }, weapon: 'ricochet', location: 'forest' });
+const blank = () => ({ best: {}, bestWave: 0, bestScore: 0, daily: {}, settings: { sound: true, quality: 'high' }, hero: 'barbarian', location: 'forest' });
 
 export function load(storage = globalThis.localStorage) {
   try {
     const raw = storage?.getItem(KEY);
-    return raw ? { ...blank(), ...JSON.parse(raw) } : blank();
+    const saved = raw ? JSON.parse(raw) : {};
+    const data = { ...blank(), ...saved };
+    data.settings = { ...blank().settings, ...saved.settings };
+    // Saves from before heroes stored a weapon id; the hero carrying that weapon replaces it.
+    data.hero = getHero(saved.hero || saved.weapon || data.hero).id;
+    delete data.weapon;
+    data.location = getLocation(data.location).id; // e.g. the old 'cave' became 'dungeon'
+    return data;
   } catch {
     return blank();
   }
@@ -28,7 +35,7 @@ export function record(data, run, dailyKey) {
   return out;
 }
 
-export const weaponUnlocked = (data, w) => data.bestScore >= w.unlock;
+export const heroUnlocked = (data, h) => data.bestScore >= h.unlock;
 export const locationUnlocked = (data, l) => data.bestWave >= l.unlockWave;
-export const unlockedWeapons = (data) => WEAPONS.filter((w) => weaponUnlocked(data, w));
+export const unlockedHeroes = (data) => HEROES.filter((h) => heroUnlocked(data, h));
 export const unlockedLocations = (data) => LOCATIONS.filter((l) => locationUnlocked(data, l));

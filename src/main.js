@@ -4,11 +4,12 @@ import { createAudio } from './audio.js';
 import { createGame, step, result, choosePerk } from './game.js';
 import { getPerk, PERKS } from './perks.js';
 import { LOCATIONS, getLocation, layoutFor } from './locations.js';
-import { WEAPONS, getWeapon, previewPath } from './weapons.js';
+import { previewPath } from './weapons.js';
+import { HEROES, getHero } from './heroes.js';
 import { createRng, todayKey } from './rng.js';
 import { challengeFromHash, challengeUrl } from './share.js';
 import * as progress from './progress.js';
-import { $, show, toast, renderWeapons, renderLocations, popup, banner, aimAt } from './ui.js';
+import { $, show, toast, renderHero, renderLocations, popup, banner, aimAt } from './ui.js';
 
 const STEP = 1 / 60;
 const data = progress.load();
@@ -40,40 +41,48 @@ audio.setMuted(!data.settings.sound);
 
 let mode = 'menu';           // menu | playing | choosing | paused | over
 let game = null;
-let run = null;              // { kind: 'free'|'daily'|'challenge', seed, date, locationId, weaponId }
+let run = null;              // { kind: 'free'|'daily'|'challenge', seed, date, locationId, heroId }
 let challenge = challengeFromHash(location.hash);
-let sceneKey = '';           // which location+weapon is currently built
+let sceneKey = '';           // which location is currently built
+let heroKey = '';            // which hero model is currently loaded
+let browse = 0;              // hero index shown on the heroes screen
 let overTimer = 0;
 let hintShown = false;
 
 const daily = (date) => {
   const rng = createRng(`daily:${date}`);
-  return { locationId: rng.pick(LOCATIONS).id, weaponId: rng.pick(WEAPONS).id };
+  return { locationId: rng.pick(LOCATIONS).id, heroId: rng.pick(HEROES).id };
 };
 
-async function buildScene(locationId, weaponId) {
-  const key = `${locationId}/${weaponId}`;
-  if (key === sceneKey) return;
-  $('loadingText').textContent = `Загрузка: ${getLocation(locationId).name}…`;
-  show('loading');
-  const loc = getLocation(locationId);
-  await view.setLocation(loc, layoutFor(loc), getWeapon(weaponId));
-  sceneKey = key;
+async function buildScene(locationId, heroId) {
+  if (locationId !== sceneKey) {
+    $('loadingText').textContent = `Загрузка: ${getLocation(locationId).name}…`;
+    show('loading');
+    const loc = getLocation(locationId);
+    await view.setLocation(loc, layoutFor(loc));
+    sceneKey = locationId;
+  }
+  await showHero(heroId);
+}
+
+async function showHero(heroId) {
+  if (heroId === heroKey) return;
+  heroKey = heroId;
+  await view.setHero(getHero(heroId));
 }
 
 // ---------- menu ----------
 function refreshMenu() {
-  const w = getWeapon(data.weapon), l = getLocation(data.location);
-  $('menuWeapon').textContent = w.name;
-  $('menuWeaponPic').src = `assets/ui/${w.model}.png`;
+  const h = getHero(data.hero), l = getLocation(data.location);
+  $('menuHero').textContent = h.name;
   $('menuLocation').textContent = l.name;
   $('menuBest').textContent = data.best[l.id] || 0;
   const today = todayKey();
   const d = daily(today);
-  $('dailySub').textContent = `${getLocation(d.locationId).name} · ${getWeapon(d.weaponId).name}${data.daily[today] ? ` · 🏆 ${data.daily[today]}` : ''}`;
+  $('dailySub').textContent = `${getLocation(d.locationId).name} · ${getHero(d.heroId).name}${data.daily[today] ? ` · 🏆 ${data.daily[today]}` : ''}`;
   const box = $('challenge');
   if (challenge) {
-    $('challengeText').innerHTML = `Друг набрал <b>${challenge.score}</b> (комбо ×${challenge.combo}, волна ${challenge.wave}) — ${getLocation(challenge.location).name}, ${getWeapon(challenge.weapon).name}. Побьёшь?`;
+    $('challengeText').innerHTML = `Друг набрал <b>${challenge.score}</b> (комбо ×${challenge.combo}, волна ${challenge.wave}) — ${getLocation(challenge.location).name}, ${getHero(challenge.weapon).name}. Побьёшь?`;
     box.classList.add('on');
   } else box.classList.remove('on');
 }
@@ -81,9 +90,9 @@ function refreshMenu() {
 async function toMenu() {
   mode = 'menu';
   input.setEnabled(false);
-  await buildScene(data.location, data.weapon);
+  await buildScene(data.location, data.hero);
   view.clearRun();
-  view.setMenu(true);
+  view.setMenu('menu');
   refreshMenu();
   show('menu');
 }
@@ -93,15 +102,15 @@ async function start(kind) {
   audio.unlock();
   screen.orientation?.lock?.('portrait').catch(() => {}); // Android / installed apps; iOS rejects it
   if (kind === 'free') {
-    run = { kind, seed: `free:${Date.now()}`, locationId: data.location, weaponId: data.weapon };
+    run = { kind, seed: `free:${Date.now()}`, locationId: data.location, heroId: data.hero };
   } else if (kind === 'daily') {
     const date = todayKey();
     run = { kind, date, seed: `daily:${date}`, ...daily(date) };
   } else {
-    run = { kind, date: challenge.date, seed: `daily:${challenge.date}`, locationId: challenge.location, weaponId: challenge.weapon };
+    run = { kind, date: challenge.date, seed: `daily:${challenge.date}`, locationId: challenge.location, heroId: getHero(challenge.weapon).id };
   }
-  await buildScene(run.locationId, run.weaponId);
-  game = createGame({ seed: run.seed, locationId: run.locationId, weaponId: run.weaponId });
+  await buildScene(run.locationId, run.heroId);
+  game = createGame({ seed: run.seed, locationId: run.locationId, weaponId: getHero(run.heroId).weapon, heroId: run.heroId });
   view.clearRun();
   view.setMenu(false);
   view.resize();
@@ -153,7 +162,7 @@ function finish() {
 
 async function share() {
   const r = result(game);
-  const url = challengeUrl(location.href, { date: run.date || todayKey(), location: r.location, weapon: r.weapon, score: r.score, combo: r.combo, wave: r.wave });
+  const url = challengeUrl(location.href, { date: run.date || todayKey(), location: r.location, weapon: r.hero, score: r.score, combo: r.combo, wave: r.wave });
   const text = `Рикошет: ${r.score} очков, комбо ×${r.combo}, волна ${r.wave}. Побей мой рекорд!`;
   try {
     if (navigator.share) { await navigator.share({ title: 'Рикошет', text, url }); return; }
@@ -311,13 +320,34 @@ for (const b of document.querySelectorAll('[data-go]')) {
   b.addEventListener('click', () => {
     audio.unlock(); audio.play({ type: 'click' });
     const to = b.dataset.go;
-    if (to === 'arsenal') renderWeapons(data, pickWeapon);
+    if (to === 'heroes') { openHeroes(); return; }
     if (to === 'locations') renderLocations(data, pickLocation);
     if (to === 'menu') { toMenu(); return; }
     show(to);
   });
 }
-function pickWeapon(id) { data.weapon = id; progress.save(data); renderWeapons(data, pickWeapon); toast(`Выбрано: ${getWeapon(id).name}`); }
+// Heroes screen: the camera closes in on the hero; arrows flip through heroes live in 3D.
+function openHeroes() {
+  browse = Math.max(0, HEROES.findIndex((h) => h.id === data.hero));
+  view.setMenu('showcase');
+  showBrowsed();
+  show('heroes');
+}
+function showBrowsed() {
+  const h = HEROES[browse];
+  renderHero(data, h, browse, HEROES.length);
+  showHero(h.id);
+}
+$('heroPrev').addEventListener('click', () => { browse = (browse + HEROES.length - 1) % HEROES.length; audio.play({ type: 'click' }); showBrowsed(); });
+$('heroNext').addEventListener('click', () => { browse = (browse + 1) % HEROES.length; audio.play({ type: 'click' }); showBrowsed(); });
+$('heroPick').addEventListener('click', () => {
+  const h = HEROES[browse];
+  if (!progress.heroUnlocked(data, h)) { toast(`Наберите ${h.unlock} очков, чтобы открыть`); return; }
+  data.hero = h.id; progress.save(data);
+  audio.play({ type: 'catch' });
+  toast(`${h.name} готов к бою`);
+  toMenu();
+});
 function pickLocation(id) { data.location = id; progress.save(data); renderLocations(data, pickLocation); toast(`Локация: ${getLocation(id).name}`); }
 
 $('playBtn').addEventListener('click', () => start('free'));

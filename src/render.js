@@ -1,32 +1,48 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
+import { Water } from 'three/addons/objects/Water.js';
+import { EffectComposer, RenderPass, EffectPass, BloomEffect, VignetteEffect } from 'postprocessing';
 import { ARENA } from './locations.js';
 import { ENEMY_TYPES } from './waves.js';
+import { createFx } from './fx.js';
 
-const WEAPON_COLORS = {
-  ricochet: 0xffd34d, boomerang: 0x5fe0ff, snake: 0x7dff6a, spiral: 0xff7ad9,
-  lightning: 0x9fb4ff, orbit: 0xffa03a, blackhole: 0xb06bff,
-};
 const TRAIL_LEN = 24;
 const AIM_MAX = 200;
-const ONE_SHOT = new Set(['Death_A', '1H_Ranged_Shoot', 'PickUp', 'Hit_A', 'Cheer']);
-const kitFor = (model) => (model.startsWith('enemy-ufo') ? 'towerdefense' : 'kaykit');
+const ONE_SHOT = new Set(['Death_A', '1H_Ranged_Shoot', 'Throw', 'Spellcast_Shoot', 'PickUp', 'Hit_A', 'Cheer', 'Spawn_Ground_Skeletons']);
+const kitFor = (model) => (model.startsWith('enemy-ufo') ? 'towerdefense' : model.startsWith('Skeleton_') ? 'skeletons' : 'heroes');
+// Decor that carries a flame; y is the flame height as a fraction of the model height.
+const FLAMES = {
+  torch_lit: { y: 0.95 }, candle_triple: { y: 1.0, scale: 0.6 }, lantern_standing: { y: 0.8, scale: 0.7 },
+  skull_candle: { y: 1.0, scale: 0.6 }, pumpkin_orange_jackolantern: { y: 0.55, scale: 0.8 }, lantern: { y: 0.6, scale: 0.6 },
+};
 
 export function createRenderer(canvas, { quality = 'high' } = {}) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality === 'high', powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality === 'high' ? 2 : 1.5));
-  renderer.shadowMap.enabled = quality === 'high';
+  const high = quality === 'high';
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, high ? 2 : 1.5));
+  renderer.shadowMap.enabled = high;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(46, 1, 0.5, 120);
+  const camera = new THREE.PerspectiveCamera(46, 1, 0.3, 120);
   const loader = new GLTFLoader();
   const texLoader = new THREE.TextureLoader();
   const cache = new Map();
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const fx = createFx(scene, { budget: high ? 1 : 0.5 });
+
+  // Bloom + vignette on the "beautiful" setting; plain rendering otherwise (cheaper, cooler phone).
+  let composer = null, bloom = null;
+  if (high) {
+    composer = new EffectComposer(renderer, { multisampling: 4 });
+    composer.addPass(new RenderPass(scene, camera));
+    bloom = new BloomEffect({ intensity: 1.1, luminanceThreshold: 0.72, luminanceSmoothing: 0.25, mipmapBlur: true });
+    composer.addPass(new EffectPass(camera, bloom,
+      new VignetteEffect({ darkness: 0.42, offset: 0.32 })));
+  }
 
   const hemi = new THREE.HemisphereLight(0xffffff, 0x445533, 1.4);
   const sun = new THREE.DirectionalLight(0xffffff, 2.2);
@@ -34,15 +50,18 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
   Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 18, bottom: -18, near: 1, far: 50 });
-  const heroLight = new THREE.PointLight(0xffe2a8, 0, 9, 1.6);
+  const heroLight = new THREE.PointLight(0xffe2a8, 0, 10, 1.6);
   scene.add(hemi, sun, sun.target, heroLight);
 
-  let level = null; // everything that belongs to the current location
-  const occluders = []; // solid obstacles that fade out when they hide the hero
+  let level = null;                   // everything that belongs to the current location
+  const heroRoot = new THREE.Group(); // hero + its projectile visuals (swapped when the hero changes)
+  scene.add(heroRoot);
+  const occluders = [];               // solid obstacles that fade out when they hide the hero
   let hero = null;
+  let heroDef = null;
+  let water = null;
   const enemyViews = new Map();
   const dying = [];
-  const particles = [];
   let proj = null;
   let menuSpin = 0;
 
@@ -54,9 +73,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   }
 
   function prepare(obj) {
-    obj.traverse((o) => {
-      if (o.isMesh) { o.castShadow = renderer.shadowMap.enabled; o.receiveShadow = true; }
-    });
+    obj.traverse((o) => { if (o.isMesh) { o.castShadow = renderer.shadowMap.enabled; o.receiveShadow = true; } });
     return obj;
   }
 
@@ -76,44 +93,63 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   async function instance(kit, name, opts) {
     const gltf = await loadModel(kit, name);
     const obj = prepare(cloneSkinned(gltf.scene)); // skeleton-aware clone (KayKit characters are skinned)
-    if (opts.lay) { obj.rotation.x = Math.PI / 2; obj.updateMatrixWorld(true); } // lay tall models flat (bullets)
+    if (opts.lay) { obj.rotation.x = Math.PI / 2; obj.updateMatrixWorld(true); }
     return { obj: fit(obj, opts), animations: gltf.animations, inner: obj };
   }
 
-  function animate(view, clipName, fade = 0.15) {
-    if (!view.mixer || view.current === clipName) return;
-    const clip = THREE.AnimationClip.findByName(view.animations, clipName);
+  function animate(v, clipName, fade = 0.15) {
+    if (!v.mixer || v.current === clipName) return;
+    const clip = THREE.AnimationClip.findByName(v.animations, clipName);
     if (!clip) return;
-    const next = view.mixer.clipAction(clip);
+    const next = v.mixer.clipAction(clip);
     if (ONE_SHOT.has(clipName)) { next.setLoop(THREE.LoopOnce, 1); next.clampWhenFinished = true; }
     next.reset();
     if (fade > 0) {
       next.fadeIn(fade).play();
-      if (view.action) view.action.fadeOut(fade);
+      if (v.action) v.action.fadeOut(fade);
     } else { // a zero-length fade divides by zero inside three.js and leaves the rig in T-pose
       next.setEffectiveWeight(1).play();
-      if (view.action && view.action !== next) view.action.stop();
+      if (v.action && v.action !== next) v.action.stop();
     }
-    view.action = next;
-    view.current = clipName;
+    v.action = next;
+    v.current = clipName;
+  }
+
+  // Tileable normal map for the water shader, generated instead of downloaded.
+  function waterNormals() {
+    const N = 128, c = document.createElement('canvas');
+    c.width = c.height = N;
+    const g = c.getContext('2d'), img = g.createImageData(N, N);
+    const h = (x, y) => Math.sin((x / N) * Math.PI * 4) * 0.5 + Math.sin(((x + y) / N) * Math.PI * 6) * 0.3 + Math.sin((y / N) * Math.PI * 8 + Math.sin((x / N) * Math.PI * 2) * 2) * 0.4;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const dx = h(x + 1, y) - h(x - 1, y), dy = h(x, y + 1) - h(x, y - 1);
+      const nx = -dx * 2, ny = -dy * 2, l = Math.hypot(nx, ny, 1), i = (y * N + x) * 4;
+      img.data[i] = ((nx / l) * 0.5 + 0.5) * 255; img.data[i + 1] = ((ny / l) * 0.5 + 0.5) * 255; img.data[i + 2] = (1 / l * 0.5 + 0.5) * 255; img.data[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return t;
   }
 
   // ---------- level ----------
-  async function setLocation(loc, layout, weapon) {
+  async function setLocation(loc, layout) {
     if (level) { scene.remove(level); level.traverse((o) => o.geometry?.dispose?.()); }
     for (const v of enemyViews.values()) scene.remove(v.obj);
     enemyViews.clear();
     dying.length = 0;
+    water = null;
     level = new THREE.Group();
 
     const sky = texLoader.load(`assets/sky/sky-${loc.sky}.jpg`);
     sky.mapping = THREE.EquirectangularReflectionMapping;
     sky.colorSpace = THREE.SRGBColorSpace;
     scene.background = sky;
-    scene.fog = new THREE.Fog(loc.fog, 24, 60);
+    scene.fog = new THREE.Fog(loc.fog, loc.rule.fogNear ?? 24, loc.rule.fogFar ?? 60);
     hemi.intensity = 1.4 * loc.light;
     sun.intensity = 2.2 * loc.light;
     heroLight.intensity = loc.rule.heroLight ? 40 : 0;
+    if (bloom) bloom.intensity = loc.bloom ?? 1.1; // bright scenes (snow) would wash out
 
     const outer = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshLambertMaterial({ color: new THREE.Color(loc.ground).multiplyScalar(0.78) }));
     outer.rotation.x = -Math.PI / 2; outer.position.y = -0.02; outer.receiveShadow = true;
@@ -121,26 +157,36 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
     level.add(outer, floor);
 
-    const wallMat = new THREE.MeshLambertMaterial({ color: loc.wall });
-    const wallH = 0.5, t = 0.3;
+    const wallMat = loc.rule.wrap
+      ? new THREE.MeshBasicMaterial({ color: loc.wall, transparent: true, opacity: 0.55 }) // glowing portal walls
+      : new THREE.MeshLambertMaterial({ color: loc.wall });
+    const wallH = loc.rule.wrap ? 0.25 : 0.5, t = 0.3;
     for (const [w, d, x, z] of [
       [ARENA.W * 2 + t * 2, t, 0, -ARENA.D - t / 2], [ARENA.W * 2 + t * 2, t, 0, ARENA.D + t / 2],
       [t, ARENA.D * 2, -ARENA.W - t / 2, 0], [t, ARENA.D * 2, ARENA.W + t / 2, 0],
     ]) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, d), wallMat);
-      m.position.set(x, wallH / 2, z); m.castShadow = m.receiveShadow = true;
+      m.position.set(x, wallH / 2, z); m.castShadow = m.receiveShadow = !loc.rule.wrap;
       level.add(m);
     }
 
     if (loc.rule.river) {
-      const r = loc.rule.river;
-      const water = new THREE.Mesh(new THREE.PlaneGeometry(ARENA.W * 2, r.half * 2), new THREE.MeshLambertMaterial({ color: 0x3aa0e0, transparent: true, opacity: 0.85 }));
-      water.rotation.x = -Math.PI / 2; water.position.set(0, 0.01, r.z);
-      water.name = 'water';
+      const r = loc.rule.river, geo = new THREE.PlaneGeometry(ARENA.W * 2 + 8, r.half * 2);
+      if (high) {
+        water = new Water(geo, {
+          textureWidth: 256, textureHeight: 256, waterNormals: waterNormals(),
+          sunDirection: sun.position.clone().normalize(), sunColor: 0xffffff, waterColor: 0x1d6f9e, distortionScale: 2.2, fog: true,
+        });
+        water.material.uniforms.size.value = 3;
+      } else {
+        water = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0x3aa0e0, transparent: true, opacity: 0.85 }));
+      }
+      water.rotation.x = -Math.PI / 2; water.position.set(0, 0.02, r.z);
       level.add(water);
     }
 
     const jobs = [];
+    const flames = [];
     occluders.length = 0;
     for (const o of layout.solids) {
       jobs.push(instance(o.kit, o.model, { r: o.r * 1.15 }).then(({ obj }) => {
@@ -154,108 +200,123 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     for (const o of layout.decor) {
       jobs.push(instance(o.kit, o.model, { r: o.fit }).then(({ obj }) => {
         obj.position.set(o.x, 0, o.z); obj.rotation.y = o.rot; level.add(obj);
+        const f = FLAMES[o.model];
+        if (f) {
+          const hgt = new THREE.Box3().setFromObject(obj).max.y;
+          flames.push({ x: o.x, y: hgt * f.y, z: o.z, scale: f.scale ?? 1 });
+        }
       }));
     }
-
-    // Hero (KayKit Rogue) with the blaster in the right hand slot.
-    jobs.push((async () => {
-      const h = await instance('kaykit', 'Rogue', { height: 1.3 });
-      const b = await instance('blaster', weapon.model, { r: 0.3 });
-      const slot = h.inner.getObjectByName('handslot.r');
-      if (slot) {
-        h.obj.updateMatrixWorld(true);
-        const ws = slot.getWorldScale(new THREE.Vector3());
-        b.obj.scale.divideScalar(ws.x); // keep the blaster's world size under the scaled skeleton
-        slot.add(b.obj); // follows the hand; its rotation is set every frame to point where the hero faces
-      } else {
-        b.obj.position.set(-0.3, 0.55, 0.3);
-        h.obj.add(b.obj);
-      }
-      // Ground ring so the hero stands out from enemies that use the same character style.
-      const mark = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.56, 28), new THREE.MeshBasicMaterial({ color: 0x5fd0ff, transparent: true, opacity: 0.9 }));
-      mark.rotation.x = -Math.PI / 2; mark.position.y = 0.03;
-      h.obj.add(mark);
-      hero = { obj: h.obj, animations: h.animations, mixer: new THREE.AnimationMixer(h.inner), blaster: slot ? b.obj : null, slot };
-      animate(hero, 'Idle');
-      level.add(h.obj);
-    })());
-
-    // Projectile: foam bullet + glow + trail.
-    jobs.push((async () => {
-      const color = WEAPON_COLORS[weapon.id];
-      const bullet = weapon.id === 'blackhole'
-        ? await instance('blaster', 'grenade-a', { r: 0.25 })
-        : await instance('blaster', 'bullet-foam', { r: 0.28, lay: true });
-      const glow = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55 }));
-      glow.position.y = 0.2;
-      const ring = new THREE.Mesh(new THREE.RingGeometry(0.45, 0.6, 24), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
-      ring.rotation.x = -Math.PI / 2; ring.position.y = 0.03;
-      const group = new THREE.Group();
-      group.add(bullet.obj, glow, ring);
-      const trailGeo = new THREE.BufferGeometry();
-      trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_LEN * 3), 3));
-      const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.8 }));
-      trail.frustumCulled = false;
-      const hole = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), new THREE.MeshBasicMaterial({ color: 0x1a0830, transparent: true, opacity: 0.7 }));
-      hole.visible = false;
-      // Aim line: dashed preview of the real trajectory while a finger is held.
-      const aimGeo = new THREE.BufferGeometry();
-      aimGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(AIM_MAX * 3), 3));
-      const aim = new THREE.Line(aimGeo, new THREE.LineDashedMaterial({ color, dashSize: 0.35, gapSize: 0.2, transparent: true, opacity: 0.9 }));
-      aim.frustumCulled = false; aim.visible = false;
-      const aimEnd = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.38, 20), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
-      aimEnd.rotation.x = -Math.PI / 2; aimEnd.visible = false;
-      // Bright dots along the aim path: thin lines get lost in perspective.
-      const dots = new THREE.InstancedMesh(new THREE.SphereGeometry(0.075, 8, 6), new THREE.MeshBasicMaterial({ color }), AIM_MAX);
-      dots.count = 0; dots.frustumCulled = false;
-      level.add(group, trail, hole, aim, aimEnd, dots);
-      proj = { group, glow, ring, trail, hole, aim, aimEnd, dots, color, filled: 0 };
-    })());
-
     await Promise.all(jobs);
+    fx.setFlames(flames);
     scene.add(level);
-    // Warm up enemy models used in this location so the first wave doesn't stutter.
+    // Warm up enemy models so the first wave doesn't stutter.
     await Promise.all(Object.values(ENEMY_TYPES).flatMap((t) => t.model).map((m) => loadModel(kitFor(m), m)));
+  }
+
+  // ---------- hero ----------
+  async function setHero(def) {
+    heroDef = def;
+    const h = await instance('heroes', def.model, { height: 1.3 });
+    if (heroDef !== def) return; // another hero was picked while this one loaded
+    // Show only this hero's props (the KayKit model carries every prop of its class in the hands).
+    for (const side of ['handslot.l', 'handslot.r']) {
+      const slot = h.inner.getObjectByName(side);
+      for (const c of slot?.children ?? []) c.visible = def.hold.includes(c.name);
+    }
+    if (def.tint) {
+      const tint = new THREE.Color(def.tint);
+      h.inner.traverse((m) => { if (m.isMesh && !/handslot/.test(m.parent?.name ?? '')) { m.material = m.material.clone(); m.material.color.multiply(tint); } });
+    }
+    // Ground ring so the hero stands out from the skeletons.
+    const mark = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.56, 28), new THREE.MeshBasicMaterial({ color: def.color, transparent: true, opacity: 0.9 }));
+    mark.rotation.x = -Math.PI / 2; mark.position.y = 0.03;
+    h.obj.add(mark);
+
+    // Projectile: the hero's object (axe, shield, rock…) or a glowing orb for mages.
+    const color = def.color;
+    const group = new THREE.Group();
+    const spinner = new THREE.Group();
+    if (!def.proj.orb) {
+      const p = await instance(def.proj.kit, def.proj.model, { r: 0.32 });
+      p.obj.position.y = -0.15;
+      spinner.add(p.obj);
+    } else {
+      spinner.add(new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(1.6) })));
+    }
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, depthWrite: false }));
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.45, 0.6, 24), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = -0.17;
+    group.add(spinner, glow, ring);
+    const trailGeo = new THREE.BufferGeometry();
+    trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_LEN * 3), 3));
+    const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.8 }));
+    trail.frustumCulled = false;
+    const hole = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), new THREE.MeshBasicMaterial({ color: 0x1a0830, transparent: true, opacity: 0.7 }));
+    hole.visible = false;
+    // Aim line: dashed preview of the real trajectory while a finger is held, plus bright dots.
+    const aimGeo = new THREE.BufferGeometry();
+    aimGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(AIM_MAX * 3), 3));
+    const aim = new THREE.Line(aimGeo, new THREE.LineDashedMaterial({ color, dashSize: 0.35, gapSize: 0.2, transparent: true, opacity: 0.9 }));
+    aim.frustumCulled = false; aim.visible = false;
+    const aimEnd = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.38, 20), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
+    aimEnd.rotation.x = -Math.PI / 2; aimEnd.visible = false;
+    const dots = new THREE.InstancedMesh(new THREE.SphereGeometry(0.075, 8, 6), new THREE.MeshBasicMaterial({ color }), AIM_MAX);
+    dots.count = 0; dots.frustumCulled = false;
+
+    heroRoot.clear();
+    heroRoot.add(h.obj, group, trail, hole, aim, aimEnd, dots);
+    group.visible = false;
+    hero = { obj: h.obj, animations: h.animations, mixer: new THREE.AnimationMixer(h.inner), shootClip: def.shoot };
+    animate(hero, 'Idle', 0);
+    proj = { group, spinner, spin: def.proj.spin !== false, glow, ring, trail, hole, aim, aimEnd, dots, color, filled: 0 };
+    if (menu) placeCamera();
   }
 
   async function addEnemyView(e) {
     const def = ENEMY_TYPES[e.type];
-    const v = await instance(kitFor(e.model), e.model, def.flying ? { r: e.r } : { height: 1.2 * def.scale });
-    const view = { obj: v.obj, animations: v.animations, mixer: v.animations.length ? new THREE.AnimationMixer(v.inner) : null, flying: def.flying };
-    animate(view, e.type === 'runner' || e.type === 'splitter' ? 'Running_A' : 'Walking_A');
+    const v = await instance(kitFor(e.model), e.model, def.flying ? { r: e.r } : { height: 1.25 * def.scale });
+    const vw = { obj: v.obj, animations: v.animations, mixer: v.animations.length ? new THREE.AnimationMixer(v.inner) : null, flying: def.flying,
+      walk: e.type === 'runner' || e.type === 'splitter' ? 'Running_A' : 'Walking_D_Skeletons' };
+    animate(vw, e.rise > 0 ? 'Spawn_Ground_Skeletons' : vw.walk, 0);
     v.obj.position.set(e.x, 0, e.z);
     level.add(v.obj);
-    return view;
+    return vw;
   }
 
   // ---------- effects ----------
-  const burstGeo = new THREE.BoxGeometry(0.14, 0.14, 0.14);
-  function burst(x, z, color, n = 10, power = 4) {
-    for (let i = 0; i < n; i++) {
-      const m = new THREE.Mesh(burstGeo, new THREE.MeshBasicMaterial({ color, transparent: true }));
-      m.position.set(x, 0.5, z);
-      const a = Math.random() * Math.PI * 2, s = power * (0.4 + Math.random() * 0.8);
-      particles.push({ m, vx: Math.cos(a) * s, vy: 2 + Math.random() * 3, vz: Math.sin(a) * s, life: 0.6 });
-      scene.add(m);
-    }
-  }
-
   function effect(ev) {
-    if (ev.type === 'kill') burst(ev.x, ev.z, proj?.color ?? 0xffffff, 8 + ev.combo * 2);
-    else if (ev.type === 'explode') burst(ev.x, ev.z, 0xb06bff, 30, 8);
-    else if (ev.type === 'death') burst(ev.x, ev.z, 0xff4d4d, 24, 6);
-    else if (ev.type === 'catch') burst(ev.x, ev.z, 0xffffff, 12, 3);
-    else if (ev.type === 'shield') burst(ev.x, ev.z, 0x5fd0ff, 20, 5);
-    else if (ev.type === 'shoot') { shootT = 0.35; if (hero) hero.current = null; }
+    const c = proj?.color ?? 0xffffff;
+    if (ev.type === 'kill') fx.burst('hit', ev.x, 0.7, ev.z, c);
+    else if (ev.type === 'bounce' || ev.type === 'chain') fx.burst('spark', ev.x, 0.55, ev.z, c);
+    else if (ev.type === 'hurt') fx.burst('spark', ev.x, 0.8, ev.z, 0xffffff);
+    else if (ev.type === 'explode') fx.burst('big', ev.x, 0.6, ev.z, c);
+    else if (ev.type === 'death') fx.burst('big', ev.x, 0.8, ev.z, 0xff4d4d);
+    else if (ev.type === 'catch' || ev.type === 'pickup' || ev.type === 'return') fx.burst('ring', ev.x, 0.6, ev.z, 0xffffff);
+    else if (ev.type === 'shield') fx.burst('ring', ev.x, 0.8, ev.z, 0x5fd0ff);
+    else if (ev.type === 'shoot') { shootT = 0.45; if (hero) hero.current = null; }
   }
 
   // ---------- per frame ----------
   const pending = new Set();
-  const qSlot = new THREE.Quaternion(), qHero = new THREE.Quaternion();
-  const Q_BACK = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+  // Fade obstacles standing between the camera and the hero (third person and the menu close-ups).
+  function fadeOccluders(dt) {
+    const active = menu || view === 'tps';
+    for (const o of occluders) {
+      let target = 1;
+      if (active) {
+        const ax = camera.position.x, az = camera.position.z, bx = heroPos.x - ax, bz = heroPos.z - az;
+        const t = Math.max(0, Math.min(1, ((o.x - ax) * bx + (o.z - az) * bz) / (bx * bx + bz * bz || 1)));
+        if (Math.hypot(ax + bx * t - o.x, az + bz * t - o.z) < o.r + 0.5) target = 0.22;
+      }
+      if (Math.abs(o.fade - target) > 0.01) {
+        o.fade += (target - o.fade) * Math.min(1, dt * 10);
+        for (const m of o.mats) { m.opacity = o.fade; m.depthWrite = o.fade > 0.9; }
+      }
+    }
+  }
   function sync(g, dt, opts = {}) {
     if (!level) return;
-    // Hero
     if (opts.yaw !== undefined) yaw = opts.yaw;
     heroPos.set(g.hero.x, 0, g.hero.z);
     if (hero) {
@@ -268,61 +329,43 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
       if (g.over) clip = 'Death_A';
       else if (g.hero.moving > 0.4) {
         // Pick the locomotion clip from the move direction relative to where the hero faces.
-        const fx = Math.sin(face), fz = Math.cos(face), m = g.hero.moving;
-        const fwd = (g.hero.vx * fx + g.hero.vz * fz) / m;
-        const side = (g.hero.vz * fx - g.hero.vx * fz) / m;
+        const fx_ = Math.sin(face), fz_ = Math.cos(face), m = g.hero.moving;
+        const fwd = (g.hero.vx * fx_ + g.hero.vz * fz_) / m;
+        const side = (g.hero.vz * fx_ - g.hero.vx * fz_) / m;
         clip = !tps || fwd > 0.55 ? 'Running_A' : fwd < -0.55 ? 'Walking_Backwards' : side > 0 ? 'Running_Strafe_Right' : 'Running_Strafe_Left';
-      } else if (shootT > 0) clip = '1H_Ranged_Shoot';
+      } else if (shootT > 0) clip = hero.shootClip;
       animate(hero, clip, 0.12);
       hero.mixer.update(dt);
-      if (hero.blaster) {
-        // World orientation = hero facing (muzzle is the model's −z, so turn it half way round).
-        hero.obj.updateMatrixWorld(true);
-        hero.slot.getWorldQuaternion(qSlot).invert();
-        hero.obj.getWorldQuaternion(qHero);
-        hero.blaster.quaternion.copy(qSlot).multiply(qHero).multiply(Q_BACK);
-      }
       heroLight.position.set(g.hero.x, 2.5, g.hero.z);
     }
     if (view === 'tps' && !menu) placeCamera(dt);
-    // Fade obstacles standing between the camera and the hero (third person only).
-    for (const o of occluders) {
-      let target = 1;
-      if (view === 'tps' && !menu) {
-        const ax = camera.position.x, az = camera.position.z, bx = heroPos.x - ax, bz = heroPos.z - az;
-        const t = Math.max(0, Math.min(1, ((o.x - ax) * bx + (o.z - az) * bz) / (bx * bx + bz * bz || 1)));
-        if (Math.hypot(ax + bx * t - o.x, az + bz * t - o.z) < o.r + 0.5) target = 0.22;
-      }
-      if (Math.abs(o.fade - target) > 0.01) {
-        o.fade += (target - o.fade) * Math.min(1, dt * 10);
-        for (const m of o.mats) { m.opacity = o.fade; m.depthWrite = o.fade > 0.9; }
-      }
-    }
+    fadeOccluders(dt);
     // Enemies
     for (const e of g.enemies) {
-      let view = enemyViews.get(e.id);
-      if (!view && !e.dead && !pending.has(e.id)) {
+      const v = enemyViews.get(e.id);
+      if (!v && !e.dead && !pending.has(e.id)) {
         pending.add(e.id);
         const owner = level;
-        addEnemyView(e).then((v) => {
+        addEnemyView(e).then((nv) => {
           pending.delete(e.id);
-          if (e.dead || owner !== level) owner.remove(v.obj); // died or level changed while loading
-          else enemyViews.set(e.id, v);
+          if (e.dead || owner !== level) owner.remove(nv.obj); // died or level changed while loading
+          else enemyViews.set(e.id, nv);
         });
         continue;
       }
-      if (!view) continue;
+      if (!v) continue;
       if (e.dead) {
-        animate(view, 'Death_A', 0.05);
-        dying.push({ view, t: 1.0 });
+        animate(v, 'Death_A', 0.05);
+        dying.push({ view: v, t: 1.1 });
         enemyViews.delete(e.id);
         continue;
       }
-      view.obj.position.set(e.x, view.flying ? 1.1 + Math.sin(g.time * 4 + e.id) * 0.15 : 0, e.z);
-      view.obj.rotation.y = view.flying ? g.time * 2 : e.facing;
+      if (e.rise <= 0) animate(v, v.walk, 0.2);
+      v.obj.position.set(e.x, v.flying ? 1.1 + Math.sin(g.time * 4 + e.id) * 0.15 : 0, e.z);
+      v.obj.rotation.y = v.flying ? g.time * 2 : e.facing;
       const s = 1 + e.hurtT * 1.5;
-      view.obj.scale.set(s, s, s);
-      view.mixer?.update(dt);
+      v.obj.scale.set(s, s, s);
+      v.mixer?.update(dt);
     }
     for (let i = dying.length - 1; i >= 0; i--) {
       const d = dying[i];
@@ -334,20 +377,21 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     // Projectile
     if (proj) {
       const p = g.projectile;
-      const held = p.state === 'held';
-      proj.group.visible = !held;
+      const flying = p.state === 'flying';
+      proj.group.visible = p.state !== 'held';
       proj.ring.visible = p.state === 'dropped';
-      proj.glow.visible = p.state === 'flying';
-      const y = p.state === 'dropped' ? 0.25 + Math.sin(g.time * 6) * 0.08 : 0.55;
-      proj.group.position.set(p.x, y - 0.2, p.z);
-      proj.group.rotation.y += dt * (p.state === 'flying' ? 18 : 2);
+      proj.glow.visible = flying;
+      const y = p.state === 'dropped' ? 0.32 + Math.sin(g.time * 6) * 0.08 : 0.6;
+      proj.group.position.set(p.x, y, p.z);
+      if (proj.spin) proj.spinner.rotation.y += dt * (flying ? 16 : 1.5);
+      else if (flying && (p.vx || p.vz)) proj.spinner.rotation.y = Math.atan2(p.vx, p.vz);
       proj.ring.scale.setScalar(1 + Math.sin(g.time * 6) * 0.12);
-      // Trail
+      fx.setTrail(proj.color, p.x, y, p.z, flying);
       const pos = proj.trail.geometry.attributes.position;
-      if (p.state === 'flying') {
+      if (flying) {
         pos.array.copyWithin(3, 0, (TRAIL_LEN - 1) * 3);
-        pos.array[0] = p.x; pos.array[1] = 0.55; pos.array[2] = p.z;
-        if (proj.filled < TRAIL_LEN) { for (let i = proj.filled; i < TRAIL_LEN; i++) pos.array.set([p.x, 0.55, p.z], i * 3); proj.filled = TRAIL_LEN; }
+        pos.array[0] = p.x; pos.array[1] = y; pos.array[2] = p.z;
+        if (proj.filled < TRAIL_LEN) { for (let i = proj.filled; i < TRAIL_LEN; i++) pos.array.set([p.x, y, p.z], i * 3); proj.filled = TRAIL_LEN; }
         pos.needsUpdate = true;
         proj.trail.visible = true;
       } else {
@@ -360,34 +404,30 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
         proj.hole.scale.setScalar(0.5 + p.pullT * 0.6);
       }
     }
-    // Particles
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const q = particles[i];
-      q.life -= dt;
-      q.vy -= 12 * dt;
-      q.m.position.x += q.vx * dt; q.m.position.y = Math.max(0.05, q.m.position.y + q.vy * dt); q.m.position.z += q.vz * dt;
-      q.m.material.opacity = Math.max(0, q.life / 0.6);
-      if (q.life <= 0) { scene.remove(q.m); q.m.material.dispose(); particles.splice(i, 1); }
-    }
-    const water = level.getObjectByName('water');
-    if (water) water.material.opacity = 0.78 + Math.sin(g.time * 2) * 0.07;
   }
 
   // ---------- camera ----------
   const PITCH = THREE.MathUtils.degToRad(58);
-  let menu = false;
+  let menu = false;      // false | 'menu' (orbit around the hero in the arena) | 'showcase' (hero close-up)
   let view = 'tps';      // 'tps' (behind the shoulder) | 'top' (whole arena from above)
   let yaw = 0;           // third-person camera heading; 0 looks toward −z
   let shootT = 0;
   const heroPos = new THREE.Vector3(0, 0, 3);
   const camGoal = new THREE.Vector3();
   function placeCamera(dt = 0) {
-    if (view === 'tps' && !menu) {
-      const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = -fz, rz = fx;
-      camGoal.set(heroPos.x - fx * 5.4 + rx * 0.75, 3.4, heroPos.z - fz * 5.4 + rz * 0.75);
+    if (menu) {
+      const a = menuSpin, close = menu === 'showcase';
+      const r = close ? 4.2 : 7.5, hgt = close ? 1.25 : 3.6;
+      camera.position.set(heroPos.x + Math.sin(a) * r, hgt, heroPos.z + Math.cos(a) * r);
+      camera.lookAt(heroPos.x, close ? 0.25 : 1.1, heroPos.z); // close-up: aim low so the hero sits above the card
+      return;
+    }
+    if (view === 'tps') {
+      const fx_ = -Math.sin(yaw), fz_ = -Math.cos(yaw), rx = -fz_, rz = fx_;
+      camGoal.set(heroPos.x - fx_ * 5.4 + rx * 0.75, 3.4, heroPos.z - fz_ * 5.4 + rz * 0.75);
       if (dt > 0) camera.position.lerp(camGoal, 1 - Math.exp(-12 * dt));
       else camera.position.copy(camGoal);
-      camera.lookAt(heroPos.x + fx * 5 + rx * 0.75, 0.9, heroPos.z + fz * 5 + rz * 0.75);
+      camera.lookAt(heroPos.x + fx_ * 5 + rx * 0.75, 0.9, heroPos.z + fz_ * 5 + rz * 0.75);
       return;
     }
     const aspect = renderer.domElement.clientWidth / Math.max(1, renderer.domElement.clientHeight);
@@ -396,12 +436,6 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     const needW = (ARENA.W + 0.6) / Math.tan(hfov / 2);
     const needD = ((ARENA.D + 0.8) * Math.sin(PITCH)) / Math.tan(vfov / 2);
     const dist = Math.max(needW, needD) * 1.02;
-    if (menu) {
-      const a = menuSpin;
-      camera.position.set(Math.sin(a) * 19, 11, Math.cos(a) * 19);
-      camera.lookAt(0, 0, 0);
-      return;
-    }
     camera.position.set(0, Math.sin(PITCH) * dist, Math.cos(PITCH) * dist + 0.4);
     camera.lookAt(0, 0, 0.4);
   }
@@ -409,14 +443,37 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   function resize() {
     const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
     renderer.setSize(w, h, false);
+    composer?.setSize(w, h, false);
     camera.aspect = w / Math.max(1, h);
     camera.updateProjectionMatrix();
     placeCamera();
   }
 
+  // If the phone can't keep ~45 fps, render fewer pixels (step by step, never below 1×): smoother
+  // play and less heat. Only real frames count — no GPU means this never kicks in during tests.
+  let perfT = 0, perfFrames = 0;
+  function adaptResolution(dt) {
+    if (!dt || dt > 0.25) return; // skip paused or backgrounded frames
+    perfT += dt; perfFrames++;
+    if (perfT < 2.5) return;
+    const fps = perfFrames / perfT;
+    perfT = 0; perfFrames = 0;
+    const pr = renderer.getPixelRatio();
+    if (fps < 45 && fps > 8 && pr > 1) { renderer.setPixelRatio(Math.max(1, pr - 0.25)); resize(); }
+  }
+
   function render(dt) {
-    if (menu) { menuSpin += dt * 0.12; placeCamera(); }
-    renderer.render(scene, camera);
+    if (menu) {
+      menuSpin += dt * (menu === 'showcase' ? 0.35 : 0.12);
+      placeCamera();
+      if (hero) { hero.obj.position.copy(heroPos); hero.obj.rotation.y = menuSpin + Math.PI * 0.15; hero.mixer.update(dt); }
+      fadeOccluders(dt);
+    }
+    adaptResolution(dt);
+    fx.update(dt);
+    if (water?.material.uniforms?.time) water.material.uniforms.time.value += dt * 0.6;
+    if (composer) composer.render(dt);
+    else renderer.render(scene, camera);
   }
 
   function screenToGround(cx, cy) {
@@ -461,9 +518,9 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   function clearRun() {
     for (const v of enemyViews.values()) level?.remove(v.obj);
     for (const d of dying) level?.remove(d.view.obj);
-    for (const q of particles) { scene.remove(q.m); q.m.material.dispose(); }
-    enemyViews.clear(); dying.length = 0; particles.length = 0; pending.clear();
-    if (proj) { proj.filled = 0; setAim(null); }
+    enemyViews.clear(); dying.length = 0; pending.clear();
+    heroPos.set(0, 0, 3);
+    if (proj) { proj.filled = 0; proj.group.visible = false; setAim(null); fx.setTrail(proj.color, 0, 0, 0, false); }
     if (hero) { hero.current = null; animate(hero, 'Idle', 0); }
   }
 
@@ -474,7 +531,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     placeCamera();
   }
 
-  function setMenu(on) { menu = on; placeCamera(); if (hero) hero.obj.visible = !on; if (proj) proj.group.visible = false; }
+  function setMenu(mode) { menu = mode || false; placeCamera(); if (proj) proj.group.visible = false; }
 
-  return { setLocation, sync, render, resize, effect, screenToGround, worldToScreen, setMenu, setView, clearRun, setAim, renderer };
+  return { setLocation, setHero, sync, render, resize, effect, screenToGround, worldToScreen, setMenu, setView, clearRun, setAim, renderer };
 }
