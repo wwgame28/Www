@@ -448,6 +448,20 @@ document.addEventListener('visibilitychange', () => {
 const landscape = matchMedia('(orientation: landscape) and (max-height: 520px)');
 landscape.addEventListener('change', (e) => { if (e.matches) pause(); });
 
+// Intro clip on launch (plays over the loading screen). Sound only if the browser allows it without a tap.
+function playIntro() {
+  const box = $('intro'), v = $('introVideo');
+  if (!box) return;
+  const close = () => { box.classList.add('off'); v.pause(); setTimeout(() => box.remove(), 400); };
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { box.remove(); return; }
+  v.addEventListener('ended', close);
+  v.querySelector('source:last-child')?.addEventListener('error', close); // no playable source
+  box.addEventListener('pointerdown', close);
+  v.muted = !data.settings.sound;
+  v.play().catch(() => { v.muted = true; v.play().catch(close); }); // iOS: muted autoplay; Low Power Mode blocks even that
+}
+playIntro();
+
 view.resize();
 requestAnimationFrame(frame);
 // Read-only handle for automated browser checks.

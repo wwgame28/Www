@@ -169,6 +169,11 @@
 
   #loading { align-items: center; justify-content: center; gap: 18px; background: var(--ink); }
   .spinner { width: 46px; height: 46px; border-radius: 50%; border: 5px solid rgba(255,255,255,.15); border-top-color: var(--gold); animation: spin .8s linear infinite; }
+  /* Intro clip on launch, over the loading screen; a tap skips it (main.js). */
+  #intro { position: fixed; inset: 0; z-index: 40; background: var(--ink); transition: opacity .35s ease; }
+  #intro video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #intro .skip { position: absolute; right: calc(14px + var(--safe-r)); top: calc(14px + var(--safe-t)); white-space: nowrap; font-weight: 800; font-size: 13px; color: rgba(255,255,255,.7); background: rgba(20,24,43,.5); padding: 6px 12px; border-radius: 999px; pointer-events: none; }
+  #intro.off { opacity: 0; pointer-events: none; }
   #toast { position: fixed; left: 50%; bottom: calc(24px + var(--safe-b)); transform: translate(-50%, 20px); background: var(--panel-solid); padding: 12px 18px; border-radius: 14px; font-weight: 800; opacity: 0; transition: .25s; pointer-events: none; }
   #toast.on { opacity: 1; transform: translate(-50%, 0); }
 
@@ -209,6 +214,8 @@
   <div class="spinner" aria-hidden="true"></div>
   <p id="loadingText" class="tagline">Загрузка…</p>
 </section>
+
+<div id="intro"><video id="introVideo" playsinline muted preload="auto"><source src="assets/ui/intro.mp4" type="video/mp4"><source src="assets/ui/intro.webm" type="video/webm"></video><span class="skip">Нажми, чтобы пропустить</span></div>
 
 <section id="menu" class="screen dim">
   <div class="topbar"><span class="spacer"></span><button class="btn icon ghost" data-go="settings" aria-label="Настройки">⚙︎</button></div>
