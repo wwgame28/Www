@@ -121,6 +121,11 @@ Presentation:
 - Controls: soft aim assist («Автоприцел», on by default), drag the fire button down to cancel, faster turning on a quick swipe, turning at the screen edge, joystick dead zone (the joystick stays fixed), a 0.2 s fire buffer.
 - Sound through a compressor: whoosh/zap per hero, kill notes climbing a pentatonic scale, drop clunk, spawn rumble, catch shing, muffled on death. Combo popups grow with the combo; a shot with 2+ kills shows its total.
 
+## v1.5 — hand-made locations
+- Obstacles are rounded boxes (`src/solid.js`): circles, capsules (walls, cars, fences) and exact boxes, sized from the models' measured footprints (`src/footprints.js`). Flat faces make bounces predictable; trees are solid only at the trunk.
+- Each location has a fixed, mirrored, hand-placed layout instead of a random scatter: a clear start, open spawn lanes, no gaps under 1 m, and its own light and fog (dark places get a plain fog-colored background).
+- Walkers walk round a solid that blocks their way instead of pressing into it, never leave the arena, and never rise inside a solid.
+
 ## Testing
 - `node --test tests/*.test.mjs`: RNG determinism, wave determinism, each weapon's trajectory invariants, kill/combo/catch scoring, pickup, share round-trip.
 - Playwright (Chromium, iPhone 14 profile, served locally): menu renders, a run starts, taps fire, no console errors, screenshots in portrait.

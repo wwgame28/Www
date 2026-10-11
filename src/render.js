@@ -4,6 +4,7 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Water } from 'three/addons/objects/Water.js';
 import { EffectComposer, RenderPass, EffectPass, BloomEffect, VignetteEffect } from 'postprocessing';
 import { ARENA } from './locations.js';
+import { solidExtent } from './solid.js';
 import { ENEMY_TYPES } from './waves.js';
 import { createFx } from './fx.js';
 
@@ -78,6 +79,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   const dying = [];
   let proj = null;
   let menuSpin = 0;
+  let look = null; // current location's light and fog (see locations.js)
 
   // Dark patches where skeletons climb out of the ground (a short warning before they come).
   const decals = Array.from({ length: 6 }, () => {
@@ -104,14 +106,16 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     return obj;
   }
 
-  // Scale a model so its footprint radius (or height) matches the simulation.
-  function fit(obj, { r, height }) {
+  // Scale a model so its footprint radius (or height) matches the simulation. `center` puts the middle
+  // of its footprint on the origin (some kit pieces sit off-center, e.g. on a hex tile's edge).
+  function fit(obj, { r, height, center = false }) {
     const box = new THREE.Box3().setFromObject(obj);
     const size = box.getSize(new THREE.Vector3());
     const s = height ? height / size.y : (r * 2) / Math.max(size.x, size.z, 1e-3);
     obj.scale.multiplyScalar(s);
     const b2 = new THREE.Box3().setFromObject(obj);
     obj.position.y -= b2.min.y;
+    if (center) { const c = b2.getCenter(new THREE.Vector3()); obj.position.x -= c.x; obj.position.z -= c.z; }
     const wrap = new THREE.Group();
     wrap.add(obj);
     return wrap;
@@ -190,13 +194,14 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     water = null;
     level = new THREE.Group();
 
-    const sky = texLoader.load(`assets/sky/sky-${loc.sky}.jpg`);
-    sky.mapping = THREE.EquirectangularReflectionMapping;
-    sky.colorSpace = THREE.SRGBColorSpace;
-    scene.background = sky;
-    scene.fog = new THREE.Fog(loc.fog, loc.rule.fogNear ?? 24, loc.rule.fogFar ?? 60);
-    hemi.intensity = 1.4 * loc.light;
-    sun.intensity = 2.2 * loc.light;
+    const sky = loc.look.bg !== undefined ? null : texLoader.load(`assets/sky/sky-${loc.sky}.jpg`);
+    if (sky) { sky.mapping = THREE.EquirectangularReflectionMapping; sky.colorSpace = THREE.SRGBColorSpace; }
+    const L = look = loc.look;
+    scene.background = L.bg !== undefined ? new THREE.Color(L.bg) : sky; // fog-colored where the fog hides the sky
+    scene.fog = new THREE.Fog(L.fog, L.near, L.far);
+    hemi.color.setHex(L.hemi[0]); hemi.groundColor.setHex(L.hemi[1]); hemi.intensity = L.hemi[2];
+    sun.color.setHex(L.sun[0]); sun.intensity = L.sun[1];
+    sun.position.set(...(L.sunPos || [-6, 14, 6]));
     heroLight.intensity = loc.rule.heroLight ? 40 : 0;
     if (bloom) bloom.intensity = loc.bloom ?? 1.1; // bright scenes (snow) would wash out
 
@@ -238,9 +243,9 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     const flames = [];
     occluders.length = 0;
     for (const o of layout.solids) {
-      jobs.push(instance(o.kit, o.model, { r: o.r * 1.15 }).then(({ obj }) => {
+      jobs.push(instance(o.kit, o.model, { ...o.fit, center: true }).then(({ obj }) => {
         obj.position.set(o.x, 0, o.z); obj.rotation.y = o.rot; level.add(obj);
-        addOccluder(obj, o.x, o.z, o.r);
+        addOccluder(obj, o.x, o.z, solidExtent(o));
       }));
     }
     for (const o of layout.decor) {
@@ -634,7 +639,14 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   // Third person: a vertical FOV that keeps ~42° across a portrait phone (62–72°).
   const tpsFov = () => clamp(THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(21)) / Math.max(0.1, camera.aspect))), 62, 72);
   const fovNow = () => (menu ? 62 : view === 'tps' ? tpsFov() : 46);
+  // From above the camera is much farther away than behind the shoulder: push the fog back as far,
+  // or dark foggy places (dungeon, cemetery) would turn black.
+  function setFog(extra) {
+    if (!look || !scene.fog) return;
+    scene.fog.near = look.near + extra; scene.fog.far = look.far + extra;
+  }
   function placeCamera(dt = null) { // dt null: snap
+    setFog(0);
     if (menu) {
       const a = menuSpin, close = menu === 'showcase';
       const r = close ? 4.2 : 7.5, hgt = close ? 1.25 : 3.6;
@@ -658,6 +670,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     const dist = Math.max(needW, needD) * 1.02;
     camera.position.set(0, Math.sin(PITCH) * dist, Math.cos(PITCH) * dist + 0.4);
     camera.lookAt(0, 0, 0.4);
+    setFog(Math.max(0, dist - 7));
   }
 
   // Applied after placeCamera each frame (real time, so it keeps shaking through a hit-stop).

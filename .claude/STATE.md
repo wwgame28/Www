@@ -9,4 +9,5 @@ Gotchas: GLTFLoader strips '.' from node names (handslot.r -> handslotr). Workfl
 - PR 7 (game feel, spec v1.4) done: render/input/audio/main + src/aim.js, tests/feel.test.mjs. Checked in headless iPhone Chromium for all 7 heroes, both views: no errors.
 - Design review: Animation + Locations reports in docs/design-review/2026-10-11-reports-part2.json. Combat & balance, UI & menus, iPhone perf and Lead designer failed on the usage limit; rerun only those (workflow-part2.js).
 - Not done from the reports: additive Hit_B flinch, ribbon trail, explosion radius ring, «Тряска экрана» toggle, one-handed mode, perimeter dressing.
-- Next: PR 8 (locations: rounded-box colliders + walk-around steering, footprints, hand-authored layouts from scratchpad lvl/newlayouts.mjs, per-location light/fog), then the four remaining reviews.
+- PR 8 (spec v1.5, locations) is in the same PR #7: src/solid.js, src/footprints.js (regenerate with scratchpad lvl/genfoot.mjs), hand-made layouts and `look` in locations.js, tests/layout.test.mjs.
+- Next: the four remaining design reviews (balance, UI, iPhone perf, lead designer), then their fixes.

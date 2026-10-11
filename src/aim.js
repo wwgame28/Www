@@ -1,16 +1,19 @@
 // Soft lock for the third-person fire button: the enemy nearest the crosshair direction, if it is
 // close to the center of the view and nothing solid stands in between. Pure, so it is unit-tested.
 
+import { solidContact } from './solid.js';
+
 const MIN_D = 1, MAX_D = 16;
 const CONE = (10 * Math.PI) / 180;      // half-angle of the lock cone…
 const CONE_NEAR = (16 * Math.PI) / 180; // …wider for enemies closer than 4 m
 const STICKY = 1.4;                     // a new target must score 1.4× better to steal the lock
 
+// Samples the hero→enemy line every 0.25 m against the solids (rounded boxes).
 function clearLine(a, b, solids) {
-  const bx = b.x - a.x, bz = b.z - a.z, l2 = bx * bx + bz * bz || 1;
-  for (const o of solids) {
-    const t = Math.max(0, Math.min(1, ((o.x - a.x) * bx + (o.z - a.z) * bz) / l2));
-    if (Math.hypot(a.x + bx * t - o.x, a.z + bz * t - o.z) < o.r) return false;
+  const n = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.25);
+  for (let i = 1; i < n; i++) {
+    const x = a.x + ((b.x - a.x) * i) / n, z = a.z + ((b.z - a.z) * i) / n;
+    if (solids.some((o) => solidContact(o, x, z, 0.1))) return false;
   }
   return true;
 }
