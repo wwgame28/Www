@@ -102,7 +102,8 @@ Structure:
 3. "План по этапам" — 3 stages (Этап 1: быстрые победы, Этап 2: основное, Этап 3: позже). Each item: what, why for the player, how (files/numbers), size S/M/L. Merge duplicates across specialists, resolve conflicts explicitly (say which side you took and why), drop low-impact noise. At most ~18 items total.
 4. "Баланс" — the measured numbers from the balance specialist and the concrete number changes.
 5. "Риски" — what could break on iPhone and how to guard it.
-Do not invent measurements; only use what the specialists report. Specialist reports:
+Do not invent measurements; only use what the specialists report.
+Part-1 reports (controls & camera, GitHub controllers) are in /home/user/Www/docs/design-review/2026-10-11-reports-part1.json — read that file first (unless they are already included below). Part-2 reports:
 ${JSON.stringify([...PREVIOUS, ...got], null, 1)}`, { label: 'Lead designer', phase: 'Synthesize' })
 
 return { plan, reports: got, missing }
