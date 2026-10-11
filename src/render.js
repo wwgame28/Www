@@ -102,6 +102,13 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     const clip = THREE.AnimationClip.findByName(v.animations, clipName);
     if (!clip) return;
     const next = v.mixer.clipAction(clip);
+    if (next === v.action) {
+      // Same clip asked again (e.g. after a shot while running): never fade an action into itself —
+      // that drives its weight to 0 and leaves the rig in the rest pose. Restart one-shots only.
+      if (ONE_SHOT.has(clipName)) next.reset().setEffectiveWeight(1).play();
+      v.current = clipName;
+      return;
+    }
     if (ONE_SHOT.has(clipName)) { next.setLoop(THREE.LoopOnce, 1); next.clampWhenFinished = true; }
     next.reset();
     if (fade > 0) {
@@ -221,7 +228,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     if (heroDef !== def) return; // another hero was picked while this one loaded
     // Show only this hero's props (the KayKit model carries every prop of its class in the hands).
     for (const side of ['handslot.l', 'handslot.r']) {
-      const slot = h.inner.getObjectByName(side);
+      const slot = h.inner.getObjectByName(THREE.PropertyBinding.sanitizeNodeName(side)); // GLTFLoader drops the dot: 'handslotr'
       for (const c of slot?.children ?? []) c.visible = def.hold.includes(c.name);
     }
     if (def.tint) {
