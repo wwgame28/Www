@@ -30,7 +30,7 @@ export const HEROES = [
   {
     id: 'ranger', name: 'Следопыт', model: 'Rogue_Hooded', weapon: 'spiral', unlock: 1500,
     weaponName: 'Вихрь-клинок', desc: 'Клинок раскручивается спиралью у цели',
-    hold: ['1H_Crossbow'], proj: { kit: 'props', model: 'sword_1handed', spin: 'whirl', len: 0.9 }, handCopy: true, color: 0xff7ad9, shoot: 'Throw',
+    hold: ['Knife_Offhand'], proj: { kit: 'props', model: 'sword_1handed', spin: 'whirl', len: 0.9 }, handCopy: true, color: 0xff7ad9, shoot: 'Throw',
   },
   {
     id: 'stormmage', name: 'Маг молний', model: 'Mage', weapon: 'lightning', unlock: 2500,

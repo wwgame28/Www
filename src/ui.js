@@ -73,10 +73,12 @@ export function renderLocations(data, onPick) {
 export function popup(x, y, text, cls = '') {
   const el = document.createElement('div');
   el.className = `pop ${cls}`;
+  if (cls.includes('combo')) el.style.rotate = `${(Math.random() - 0.5) * 12}deg`; // a little tilt, so a chain doesn't look stamped
   el.textContent = text;
   el.style.left = `${x}px`; el.style.top = `${y}px`;
   $('pops').append(el);
-  setTimeout(() => el.remove(), 850);
+  el.addEventListener('animationend', () => el.remove());
+  setTimeout(() => el.remove(), 2000); // in case the animation never runs (reduced motion)
 }
 
 export function banner(text) {

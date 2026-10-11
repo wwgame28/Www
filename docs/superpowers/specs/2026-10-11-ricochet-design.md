@@ -113,6 +113,14 @@ Presentation:
 - Models loaded per location; GLB templates cached and cloned.
 - Loop and audio paused on `visibilitychange`; no per-frame allocations in hot paths.
 
+## v1.4 — game feel (from the design review, docs/design-review/)
+- Thrown props are real-size and fly the way they would: the axe tumbles, the shield flies flat and leans into its curve, the dagger points forward, the sword whirls; a dropped blade sticks in the ground under a light beam. The thrown prop leaves the hero's hand and pops back on return.
+- Arms and legs animate separately (the throw plays while running); strides match the real speed; skeletons climb out of the ground (Spawn_Ground, timed to the 0.9 s rise) over a dark patch; split children pop in.
+- Kills: hit-stop (45 ms, 25 ms inside a fast chain), white flash, the body flies along the shot and sinks, camera shake (off under reduced motion), slow motion on a ×4 combo and on the last kill of a wave; death freezes, then slows, and the killer taunts.
+- Third-person camera higher and steadier (smoothed follow, FOV from the screen shape); only obstacles that really hide the hero fade.
+- Controls: soft aim assist («Автоприцел», on by default), drag the fire button down to cancel, faster turning on a quick swipe, turning at the screen edge, joystick dead zone (the joystick stays fixed), a 0.2 s fire buffer.
+- Sound through a compressor: whoosh/zap per hero, kill notes climbing a pentatonic scale, drop clunk, spawn rumble, catch shing, muffled on death. Combo popups grow with the combo; a shot with 2+ kills shows its total.
+
 ## Testing
 - `node --test tests/*.test.mjs`: RNG determinism, wave determinism, each weapon's trajectory invariants, kill/combo/catch scoring, pickup, share round-trip.
 - Playwright (Chromium, iPhone 14 profile, served locally): menu renders, a run starts, taps fire, no console errors, screenshots in portrait.

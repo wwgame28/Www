@@ -75,7 +75,7 @@ function killEnemy(g, e, p) {
   const points = 10 * p.kills * g.shotMult;
   g.score += points;
   g.bestCombo = Math.max(g.bestCombo, p.kills);
-  emit(g, 'kill', { x: e.x, z: e.z, points, combo: p.kills, id: e.id });
+  emit(g, 'kill', { x: e.x, z: e.z, points, combo: p.kills, id: e.id, vx: p.vx, vz: p.vz, px: p.x, pz: p.z }); // render throws the body along the hit
   if (e.type === 'splitter') {
     for (const side of [-1, 1]) {
       const child = addEnemy(g, 'runner', e.x + side * 0.5, e.z, ENEMY_TYPES.runner.model[0]);
