@@ -6,6 +6,8 @@ import { blankMods, offerPerks, applyPerk } from './perks.js';
 const HERO_SPEED = 5.2;
 const HERO_R = 0.4;
 const WAVE_BREAK = 1.6;
+const PICKUP_R = 1.1;  // hand reach for a dropped projectile (× long-reach perk)
+const VACUUM_R = 1.8;  // inside this the projectile flies to the hand by itself
 
 export function createGame({ seed, locationId, weaponId, heroId = null }) {
   const loc = getLocation(locationId);
@@ -76,7 +78,8 @@ function killEnemy(g, e, p) {
   emit(g, 'kill', { x: e.x, z: e.z, points, combo: p.kills, id: e.id });
   if (e.type === 'splitter') {
     for (const side of [-1, 1]) {
-      const child = addEnemy(g, 'runner', e.x + side * 0.5, e.z, 'Rogue_Hooded');
+      const child = addEnemy(g, 'runner', e.x + side * 0.5, e.z, ENEMY_TYPES.runner.model[0]);
+      child.split = true; // render pops it in (it doesn't rise from the ground)
       p.hits.add(child.id); // spawned by this shot — it can't be killed by the same pass
     }
   }
@@ -116,12 +119,13 @@ export function step(g, dt, input = {}) {
     g.shotMult = g.pendingMult;
     g.pendingMult = 1;
     h.facing = Math.atan2(input.fire.x - h.x, input.fire.z - h.z);
-    emit(g, 'shoot', { x: h.x, z: h.z, mult: g.shotMult });
+    emit(g, 'shoot', { x: h.x, z: h.z, mult: g.shotMult, tx: input.fire.x, tz: input.fire.z });
   }
   const proj = g.projectile;
   if (proj.state === 'held') { proj.x = h.x; proj.z = h.z; }
 
   const world = { arena: g.arena, solids: g.solids, enemies: g.enemies, hero: h, rule };
+  const wasFlying = proj.state === 'flying';
   stepProjectile(proj, dt, world);
   for (const ev of proj.events) emit(g, ev, { x: proj.x, z: proj.z });
   proj.events.length = 0;
@@ -144,11 +148,17 @@ export function step(g, dt, input = {}) {
     }
   }
 
-  // Magnet perk: a dropped projectile crawls toward the hero.
+  if (wasFlying && proj.state === 'dropped') emit(g, 'drop', { x: proj.x, z: proj.z });
+
+  // Getting the projectile back: within 1.8 m it hops into the hand on its own (8 m/s); the magnet
+  // perk reaches further and crawls it in.
   const dHero = Math.hypot(proj.x - h.x, proj.z - h.z);
-  if (proj.state === 'dropped' && g.mods.magnet && dHero < 2 + 2 * g.mods.magnet) {
-    const pull = (2 + 1.5 * g.mods.magnet) * dt / Math.max(dHero, 0.01);
-    proj.x += (h.x - proj.x) * pull; proj.z += (h.z - proj.z) * pull;
+  if (proj.state === 'dropped' && dHero > 1e-3) {
+    const speed = dHero < VACUUM_R ? 8 : g.mods.magnet && dHero < 2.5 + 2 * g.mods.magnet ? 2 + 1.5 * g.mods.magnet : 0;
+    if (speed) {
+      const k = Math.min(1, (speed * dt) / dHero);
+      proj.x += (h.x - proj.x) * k; proj.z += (h.z - proj.z) * k;
+    }
   }
   // Catch in flight (×2 next shot) or pick up from the floor.
   const reach = 1 + 0.5 * g.mods.reach;
@@ -156,7 +166,7 @@ export function step(g, dt, input = {}) {
     proj.state = 'held';
     g.pendingMult = 2;
     emit(g, 'catch', { x: h.x, z: h.z });
-  } else if (proj.state === 'dropped' && dHero < 0.85 * reach) {
+  } else if (proj.state === 'dropped' && Math.hypot(proj.x - h.x, proj.z - h.z) < PICKUP_R * reach) {
     proj.state = 'held';
     emit(g, 'pickup', { x: h.x, z: h.z });
   }
@@ -177,9 +187,12 @@ export function step(g, dt, input = {}) {
     while (g.queue.length && g.queue[0].at <= g.waveT) {
       const s = g.queue.shift();
       const flying = !!ENEMY_TYPES[s.type].flying;
-      const pos = spawnPos(g, s, flying);
+      let pos = spawnPos(g, s, flying);
+      // Never rise right next to the hero: mirror along the wall instead (still deterministic).
+      if (Math.hypot(pos.x - h.x, pos.z - h.z) < 3.5) pos = spawnPos(g, { ...s, along: -s.along }, flying);
       const e = addEnemy(g, s.type, pos.x, pos.z, s.model);
       if (!flying) e.rise = RISE_TIME; // harmless and still while climbing out of the ground
+      emit(g, 'spawn', { x: e.x, z: e.z, id: e.id, flying, rise: e.rise });
     }
   }
 
@@ -209,7 +222,8 @@ export function step(g, dt, input = {}) {
         continue;
       }
       g.over = true;
-      emit(g, 'death', { x: h.x, z: h.z });
+      g.killer = e.id;
+      emit(g, 'death', { x: h.x, z: h.z, by: e.id });
       return;
     }
   }

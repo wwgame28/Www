@@ -50,6 +50,7 @@ export function createFx(scene, { budget = 1 } = {}) {
     hit: { pool: 6, count: 26, speed: [2, 5.5], life: [0.3, 0.6], size: [0.12, 0.26], gravity: 5, radius: 0.3 },
     big: { pool: 2, count: 70, speed: [4, 9], life: [0.4, 0.8], size: [0.18, 0.4], gravity: 3, radius: 0.6 },
     ring: { pool: 3, count: 20, speed: [1.5, 3], life: [0.3, 0.5], size: [0.1, 0.2], radius: 0.4 },
+    dust: { pool: 4, count: 16, speed: [0.6, 1.6], life: [0.5, 0.9], size: [0.25, 0.5], gravity: 0.6, radius: 0.45, cone: true },
   };
   const pools = {};
   for (const [k, def] of Object.entries(KINDS)) pools[k] = { i: 0, list: Array.from({ length: def.pool }, () => make(def)) };

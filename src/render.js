@@ -9,7 +9,7 @@ import { createFx } from './fx.js';
 
 const TRAIL_LEN = 24;
 const AIM_MAX = 200;
-const ONE_SHOT = new Set(['Death_A', '1H_Ranged_Shoot', 'Throw', 'Spellcast_Shoot', 'PickUp', 'Hit_A', 'Cheer', 'Spawn_Ground_Skeletons']);
+const ONE_SHOT = new Set(['Death_A', '1H_Ranged_Shoot', 'Throw', 'Spellcast_Shoot', 'PickUp', 'Hit_A', 'Cheer', 'Spawn_Ground']);
 const kitFor = (model) => (model.startsWith('enemy-ufo') ? 'towerdefense' : model.startsWith('Skeleton_') ? 'skeletons' : 'heroes');
 // Decor that carries a flame; y is the flame height as a fraction of the model height.
 const FLAMES = {
@@ -276,7 +276,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     group.visible = false;
     hero = { obj: h.obj, animations: h.animations, mixer: new THREE.AnimationMixer(h.inner), shootClip: def.shoot };
     animate(hero, 'Idle', 0);
-    proj = { group, spinner, spin: def.proj.spin !== false, glow, ring, trail, hole, aim, aimEnd, dots, color, filled: 0 };
+    proj = { group, spinner, spin: def.proj.spin !== 'point', glow, ring, trail, hole, aim, aimEnd, dots, color, filled: 0 };
     if (menu) placeCamera();
   }
 
@@ -285,7 +285,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     const v = await instance(kitFor(e.model), e.model, def.flying ? { r: e.r } : { height: 1.25 * def.scale });
     const vw = { obj: v.obj, animations: v.animations, mixer: v.animations.length ? new THREE.AnimationMixer(v.inner) : null, flying: def.flying,
       walk: e.type === 'runner' || e.type === 'splitter' ? 'Running_A' : 'Walking_D_Skeletons' };
-    animate(vw, e.rise > 0 ? 'Spawn_Ground_Skeletons' : vw.walk, 0);
+    animate(vw, e.rise > 0 ? 'Spawn_Ground' : vw.walk, 0);
     v.obj.position.set(e.x, 0, e.z);
     level.add(v.obj);
     return vw;

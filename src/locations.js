@@ -50,7 +50,7 @@ export const LOCATIONS = [
     ground: 0x5d6b4a, wall: 0x3b3a33, fog: 0x2a2f38, light: 0.55, obstacleCount: 12,
     obstacles: [o('halloween', 'grave_A', 0.5), o('halloween', 'gravestone', 0.45), o('halloween', 'crypt', 1.0), o('halloween', 'tree_dead_large', 0.7), o('halloween', 'coffin', 0.5), o('halloween', 'shrine_candles', 0.55), o('halloween', 'tree_pine_orange_medium', 0.6)],
     decor: [d('halloween', 'pumpkin_orange_jackolantern', 0.3), d('halloween', 'skull_candle', 0.2), d('halloween', 'lantern_standing', 0.3, true), d('halloween', 'fence_broken', 0.8, true), d('halloween', 'bone_A', 0.2)],
-    rule: { heroLight: true, fogNear: 6, fogFar: 22 },
+    rule: { heroLight: true, fogNear: 8, fogFar: 22 },
   },
   {
     id: 'space', name: 'Космостанция', icon: '🚀', unlockWave: 18, sky: 'alien', desc: 'Порталы: снаряд выходит с другой стороны',
