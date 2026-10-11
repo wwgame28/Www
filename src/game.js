@@ -73,7 +73,7 @@ function killEnemy(g, e, p) {
   emit(g, 'kill', { x: e.x, z: e.z, points, combo: p.kills, id: e.id });
   if (e.type === 'splitter') {
     for (const side of [-1, 1]) {
-      const child = addEnemy(g, 'runner', e.x + side * 0.5, e.z, 'character-e');
+      const child = addEnemy(g, 'runner', e.x + side * 0.5, e.z, 'Rogue_Hooded');
       p.hits.add(child.id); // spawned by this shot — it can't be killed by the same pass
     }
   }

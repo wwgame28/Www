@@ -14,13 +14,28 @@ const STEP = 1 / 60;
 const data = progress.load();
 const audio = createAudio();
 const canvas = $('game');
-const stickCenter = () => {
-  const r = $('stick').getBoundingClientRect();
+const centerOf = (id) => () => {
+  const r = $(id).getBoundingClientRect();
   return r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
 };
-const input = createInput(canvas, stickCenter);
+const viewMode = () => (data.settings.view === 'top' ? 'top' : 'tps'); // third person by default
+const input = createInput(canvas, { stickCenter: centerOf('stick'), fireCenter: centerOf('fireBtn'), mode: viewMode });
 document.body.classList.toggle('stick-right', !!data.settings.stickRight);
+document.body.classList.toggle('tps', viewMode() === 'tps');
 const view = createRenderer(canvas, { quality: data.settings.quality });
+view.setView(viewMode());
+let yaw = 0; // third-person camera heading (0 looks toward −z, where most enemies come from)
+const LOOK_SENS = 0.0065;
+const AIM_DIST = 8;
+const forward = () => ({ x: -Math.sin(yaw), z: -Math.cos(yaw) });
+const aheadOfHero = () => { const f = forward(); return { x: game.hero.x + f.x * AIM_DIST, z: game.hero.z + f.z * AIM_DIST }; };
+// Stick (screen right/down) → world direction: relative to the camera in third person.
+function moveVector() {
+  const m = input.move();
+  if (viewMode() !== 'tps') return m;
+  const f = forward(), r = { x: -f.z, z: f.x };
+  return { x: r.x * m.x - f.x * m.z, z: r.z * m.x - f.z * m.z };
+}
 audio.setMuted(!data.settings.sound);
 
 let mode = 'menu';           // menu | playing | choosing | paused | over
@@ -91,6 +106,8 @@ async function start(kind) {
   view.resize();
   $('score').textContent = '0';
   $('wave').textContent = 'Волна 1';
+  yaw = 0;
+  updateHint();
   $('hint').style.opacity = hintShown ? 0 : 1;
   $('pops').innerHTML = '';
   renderPerkRow();
@@ -207,6 +224,8 @@ function updateHud() {
     if (l > 60) { kx *= 60 / l; ky *= 60 / l; }
   }
   el.classList.toggle('active', !!st);
+  $('fireBtn').classList.toggle('active', input.firing());
+  $('fireBtn').classList.toggle('empty', game.projectile.state !== 'held');
   el.firstElementChild.style.transform = `translate(${kx}px, ${ky}px)`;
 }
 
@@ -238,6 +257,19 @@ function renderPerkRow() {
   $('perkRow').innerHTML = PERKS.filter((p) => game?.mods[p.id]).map((p) => `<span>${p.icon}${game.mods[p.id] > 1 ? game.mods[p.id] : ''}</span>`).join('');
 }
 
+// Third person: the crosshair sits where a shot straight ahead is aimed.
+function placeCrosshair() {
+  const t = aheadOfHero(), s = view.worldToScreen(t.x, 0.6, t.z), el = $('crosshair');
+  el.style.left = `${s.x}px`; el.style.top = `${s.y}px`;
+  el.classList.toggle('ready', game.projectile.state === 'held');
+}
+
+function updateHint() {
+  $('hint').textContent = viewMode() === 'tps'
+    ? 'Джойстик — бежать. Веди по экрану — поворот. Кнопка — выстрел (зажми — прицел).'
+    : 'Джойстик — бежать. Зажми палец — прицел, отпусти — выстрел.';
+}
+
 // ---------- loop ----------
 let last = performance.now(), acc = 0;
 function frame(now) {
@@ -251,18 +283,21 @@ function frame(now) {
       acc -= STEP;
       let fire = null;
       const tap = input.takeFire();
-      if (tap) { fire = view.screenToGround(tap.x, tap.y); aimAt(tap.x, tap.y); }
-      step(game, STEP, { move: input.move(), fire });
+      if (tap?.forward) fire = aheadOfHero();
+      else if (tap) { fire = view.screenToGround(tap.x, tap.y); aimAt(tap.x, tap.y); }
+      step(game, STEP, { move: moveVector(), fire });
       for (const ev of game.events) handle(ev);
       game.events.length = 0;
     }
-    // Aim line: the real trajectory toward the held finger.
+    yaw -= input.takeLook() * LOOK_SENS;
+    // Aim line: the real trajectory toward the held finger (or straight ahead in third person).
     const aim = game.projectile.state === 'held' && !game.over ? input.aim() : null;
-    const target = aim && view.screenToGround(aim.x, aim.y);
+    const target = aim && (aim.forward ? aheadOfHero() : view.screenToGround(aim.x, aim.y));
     view.setAim(target ? previewPath(game.weapon.id, game.hero, target, { arena: game.arena, solids: game.solids, rule: game.loc.rule }, game.mods) : null);
     updateHud();
   }
-  if (game && mode !== 'menu') view.sync(game, mode === 'paused' ? 0 : dt);
+  if (game && mode !== 'menu') view.sync(game, mode === 'paused' ? 0 : dt, { yaw });
+  if (game && mode === 'playing' && viewMode() === 'tps') placeCrosshair();
   if (mode === 'playing' && game?.over) {
     overTimer -= dt;
     if (overTimer <= 0) finish();
@@ -301,6 +336,7 @@ const toggle = (id, on, onChange) => {
   el.addEventListener('click', () => { const v = !el.classList.contains('on'); el.classList.toggle('on', v); onChange(v); progress.save(data); });
 };
 toggle('soundToggle', data.settings.sound, (v) => { data.settings.sound = v; audio.setMuted(!v); });
+toggle('viewToggle', viewMode() === 'tps', (v) => { data.settings.view = v ? 'tps' : 'top'; document.body.classList.toggle('tps', v); view.setView(viewMode()); updateHint(); });
 toggle('stickToggle', !!data.settings.stickRight, (v) => { data.settings.stickRight = v; document.body.classList.toggle('stick-right', v); });
 toggle('qualityToggle', data.settings.quality === 'high', (v) => { data.settings.quality = v ? 'high' : 'low'; toast('Применится после перезапуска'); });
 
@@ -313,7 +349,7 @@ document.addEventListener('visibilitychange', () => {
 view.resize();
 requestAnimationFrame(frame);
 // Read-only handle for automated browser checks.
-Object.defineProperty(window, '__ricochet', { value: { get game() { return game; } } });
+Object.defineProperty(window, '__ricochet', { value: { get game() { return game; }, get yaw() { return yaw; } } });
 toMenu().catch((e) => {
   console.error(e);
   $('loadingText').textContent = 'Не удалось загрузить игру. Обновите страницу.';

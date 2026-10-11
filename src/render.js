@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { ARENA } from './locations.js';
 import { ENEMY_TYPES } from './waves.js';
 
@@ -9,6 +10,8 @@ const WEAPON_COLORS = {
 };
 const TRAIL_LEN = 24;
 const AIM_MAX = 200;
+const ONE_SHOT = new Set(['Death_A', '1H_Ranged_Shoot', 'PickUp', 'Hit_A', 'Cheer']);
+const kitFor = (model) => (model.startsWith('enemy-ufo') ? 'towerdefense' : 'kaykit');
 
 export function createRenderer(canvas, { quality = 'high' } = {}) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality === 'high', powerPreference: 'high-performance' });
@@ -30,11 +33,12 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   sun.position.set(-6, 14, 6);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
-  Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 14, bottom: -14, near: 1, far: 40 });
+  Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 18, bottom: -18, near: 1, far: 50 });
   const heroLight = new THREE.PointLight(0xffe2a8, 0, 9, 1.6);
   scene.add(hemi, sun, sun.target, heroLight);
 
   let level = null; // everything that belongs to the current location
+  const occluders = []; // solid obstacles that fade out when they hide the hero
   let hero = null;
   const enemyViews = new Map();
   const dying = [];
@@ -71,7 +75,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
 
   async function instance(kit, name, opts) {
     const gltf = await loadModel(kit, name);
-    const obj = prepare(gltf.scene.clone(true));
+    const obj = prepare(cloneSkinned(gltf.scene)); // skeleton-aware clone (KayKit characters are skinned)
     if (opts.lay) { obj.rotation.x = Math.PI / 2; obj.updateMatrixWorld(true); } // lay tall models flat (bullets)
     return { obj: fit(obj, opts), animations: gltf.animations, inner: obj };
   }
@@ -81,9 +85,15 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     const clip = THREE.AnimationClip.findByName(view.animations, clipName);
     if (!clip) return;
     const next = view.mixer.clipAction(clip);
-    if (clipName === 'die') { next.setLoop(THREE.LoopOnce, 1); next.clampWhenFinished = true; }
-    next.reset().fadeIn(fade).play();
-    if (view.action) view.action.fadeOut(fade);
+    if (ONE_SHOT.has(clipName)) { next.setLoop(THREE.LoopOnce, 1); next.clampWhenFinished = true; }
+    next.reset();
+    if (fade > 0) {
+      next.fadeIn(fade).play();
+      if (view.action) view.action.fadeOut(fade);
+    } else { // a zero-length fade divides by zero inside three.js and leaves the rig in T-pose
+      next.setEffectiveWeight(1).play();
+      if (view.action && view.action !== next) view.action.stop();
+    }
     view.action = next;
     view.current = clipName;
   }
@@ -131,9 +141,14 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     }
 
     const jobs = [];
+    occluders.length = 0;
     for (const o of layout.solids) {
       jobs.push(instance(o.kit, o.model, { r: o.r * 1.15 }).then(({ obj }) => {
         obj.position.set(o.x, 0, o.z); obj.rotation.y = o.rot; level.add(obj);
+        // Own materials so this obstacle alone can fade when it blocks the third-person camera.
+        const mats = [];
+        obj.traverse((m) => { if (m.isMesh) { m.material = m.material.clone(); m.material.transparent = true; mats.push(m.material); } });
+        occluders.push({ x: o.x, z: o.z, r: o.r, mats, fade: 1 });
       }));
     }
     for (const o of layout.decor) {
@@ -142,19 +157,26 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
       }));
     }
 
-    // Hero with the blaster held at the right side.
+    // Hero (KayKit Rogue) with the blaster in the right hand slot.
     jobs.push((async () => {
-      const h = await instance('characters', 'character-a', { height: 1.15 });
-      const b = await instance('blaster', weapon.model, { r: 0.28 });
-      b.obj.position.set(-0.28, 0.42, 0.28);
-      b.obj.rotation.y = Math.PI;
-      h.obj.add(b.obj);
+      const h = await instance('kaykit', 'Rogue', { height: 1.3 });
+      const b = await instance('blaster', weapon.model, { r: 0.3 });
+      const slot = h.inner.getObjectByName('handslot.r');
+      if (slot) {
+        h.obj.updateMatrixWorld(true);
+        const ws = slot.getWorldScale(new THREE.Vector3());
+        b.obj.scale.divideScalar(ws.x); // keep the blaster's world size under the scaled skeleton
+        slot.add(b.obj); // follows the hand; its rotation is set every frame to point where the hero faces
+      } else {
+        b.obj.position.set(-0.3, 0.55, 0.3);
+        h.obj.add(b.obj);
+      }
       // Ground ring so the hero stands out from enemies that use the same character style.
       const mark = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.56, 28), new THREE.MeshBasicMaterial({ color: 0x5fd0ff, transparent: true, opacity: 0.9 }));
       mark.rotation.x = -Math.PI / 2; mark.position.y = 0.03;
       h.obj.add(mark);
-      hero = { obj: h.obj, animations: h.animations, mixer: new THREE.AnimationMixer(h.inner) };
-      animate(hero, 'holding-right');
+      hero = { obj: h.obj, animations: h.animations, mixer: new THREE.AnimationMixer(h.inner), blaster: slot ? b.obj : null, slot };
+      animate(hero, 'Idle');
       level.add(h.obj);
     })());
 
@@ -183,22 +205,24 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
       aim.frustumCulled = false; aim.visible = false;
       const aimEnd = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.38, 20), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
       aimEnd.rotation.x = -Math.PI / 2; aimEnd.visible = false;
-      level.add(group, trail, hole, aim, aimEnd);
-      proj = { group, glow, ring, trail, hole, aim, aimEnd, color, filled: 0 };
+      // Bright dots along the aim path: thin lines get lost in perspective.
+      const dots = new THREE.InstancedMesh(new THREE.SphereGeometry(0.075, 8, 6), new THREE.MeshBasicMaterial({ color }), AIM_MAX);
+      dots.count = 0; dots.frustumCulled = false;
+      level.add(group, trail, hole, aim, aimEnd, dots);
+      proj = { group, glow, ring, trail, hole, aim, aimEnd, dots, color, filled: 0 };
     })());
 
     await Promise.all(jobs);
     scene.add(level);
     // Warm up enemy models used in this location so the first wave doesn't stutter.
-    await Promise.all(Object.values(ENEMY_TYPES).flatMap((t) => t.model).map((m) => loadModel(m.startsWith('enemy-ufo') ? 'towerdefense' : 'characters', m)));
+    await Promise.all(Object.values(ENEMY_TYPES).flatMap((t) => t.model).map((m) => loadModel(kitFor(m), m)));
   }
 
   async function addEnemyView(e) {
     const def = ENEMY_TYPES[e.type];
-    const kit = e.model.startsWith('enemy-ufo') ? 'towerdefense' : 'characters';
-    const v = await instance(kit, e.model, def.flying ? { r: e.r } : { height: 1.0 * def.scale });
+    const v = await instance(kitFor(e.model), e.model, def.flying ? { r: e.r } : { height: 1.2 * def.scale });
     const view = { obj: v.obj, animations: v.animations, mixer: v.animations.length ? new THREE.AnimationMixer(v.inner) : null, flying: def.flying };
-    animate(view, e.type === 'runner' ? 'sprint' : 'walk');
+    animate(view, e.type === 'runner' || e.type === 'splitter' ? 'Running_A' : 'Walking_A');
     v.obj.position.set(e.x, 0, e.z);
     level.add(v.obj);
     return view;
@@ -222,19 +246,57 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     else if (ev.type === 'death') burst(ev.x, ev.z, 0xff4d4d, 24, 6);
     else if (ev.type === 'catch') burst(ev.x, ev.z, 0xffffff, 12, 3);
     else if (ev.type === 'shield') burst(ev.x, ev.z, 0x5fd0ff, 20, 5);
+    else if (ev.type === 'shoot') { shootT = 0.35; if (hero) hero.current = null; }
   }
 
   // ---------- per frame ----------
   const pending = new Set();
-  function sync(g, dt) {
+  const qSlot = new THREE.Quaternion(), qHero = new THREE.Quaternion();
+  const Q_BACK = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+  function sync(g, dt, opts = {}) {
     if (!level) return;
     // Hero
+    if (opts.yaw !== undefined) yaw = opts.yaw;
+    heroPos.set(g.hero.x, 0, g.hero.z);
     if (hero) {
-      hero.obj.position.set(g.hero.x, 0, g.hero.z);
-      hero.obj.rotation.y = g.hero.facing;
-      animate(hero, g.over ? 'die' : g.hero.moving > 3.5 ? 'sprint' : g.hero.moving > 0.4 ? 'walk' : 'holding-right');
+      const tps = view === 'tps';
+      const face = tps ? yaw + Math.PI : g.hero.facing; // third person: always face where the camera looks
+      hero.obj.position.copy(heroPos);
+      hero.obj.rotation.y = face;
+      shootT = Math.max(0, shootT - dt);
+      let clip = 'Idle';
+      if (g.over) clip = 'Death_A';
+      else if (g.hero.moving > 0.4) {
+        // Pick the locomotion clip from the move direction relative to where the hero faces.
+        const fx = Math.sin(face), fz = Math.cos(face), m = g.hero.moving;
+        const fwd = (g.hero.vx * fx + g.hero.vz * fz) / m;
+        const side = (g.hero.vz * fx - g.hero.vx * fz) / m;
+        clip = !tps || fwd > 0.55 ? 'Running_A' : fwd < -0.55 ? 'Walking_Backwards' : side > 0 ? 'Running_Strafe_Right' : 'Running_Strafe_Left';
+      } else if (shootT > 0) clip = '1H_Ranged_Shoot';
+      animate(hero, clip, 0.12);
       hero.mixer.update(dt);
+      if (hero.blaster) {
+        // World orientation = hero facing (muzzle is the model's −z, so turn it half way round).
+        hero.obj.updateMatrixWorld(true);
+        hero.slot.getWorldQuaternion(qSlot).invert();
+        hero.obj.getWorldQuaternion(qHero);
+        hero.blaster.quaternion.copy(qSlot).multiply(qHero).multiply(Q_BACK);
+      }
       heroLight.position.set(g.hero.x, 2.5, g.hero.z);
+    }
+    if (view === 'tps' && !menu) placeCamera(dt);
+    // Fade obstacles standing between the camera and the hero (third person only).
+    for (const o of occluders) {
+      let target = 1;
+      if (view === 'tps' && !menu) {
+        const ax = camera.position.x, az = camera.position.z, bx = heroPos.x - ax, bz = heroPos.z - az;
+        const t = Math.max(0, Math.min(1, ((o.x - ax) * bx + (o.z - az) * bz) / (bx * bx + bz * bz || 1)));
+        if (Math.hypot(ax + bx * t - o.x, az + bz * t - o.z) < o.r + 0.5) target = 0.22;
+      }
+      if (Math.abs(o.fade - target) > 0.01) {
+        o.fade += (target - o.fade) * Math.min(1, dt * 10);
+        for (const m of o.mats) { m.opacity = o.fade; m.depthWrite = o.fade > 0.9; }
+      }
     }
     // Enemies
     for (const e of g.enemies) {
@@ -251,8 +313,8 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
       }
       if (!view) continue;
       if (e.dead) {
-        animate(view, 'die', 0.05);
-        dying.push({ view, t: 0.7 });
+        animate(view, 'Death_A', 0.05);
+        dying.push({ view, t: 1.0 });
         enemyViews.delete(e.id);
         continue;
       }
@@ -314,7 +376,20 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   // ---------- camera ----------
   const PITCH = THREE.MathUtils.degToRad(58);
   let menu = false;
-  function placeCamera() {
+  let view = 'tps';      // 'tps' (behind the shoulder) | 'top' (whole arena from above)
+  let yaw = 0;           // third-person camera heading; 0 looks toward −z
+  let shootT = 0;
+  const heroPos = new THREE.Vector3(0, 0, 3);
+  const camGoal = new THREE.Vector3();
+  function placeCamera(dt = 0) {
+    if (view === 'tps' && !menu) {
+      const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = -fz, rz = fx;
+      camGoal.set(heroPos.x - fx * 5.4 + rx * 0.75, 3.4, heroPos.z - fz * 5.4 + rz * 0.75);
+      if (dt > 0) camera.position.lerp(camGoal, 1 - Math.exp(-12 * dt));
+      else camera.position.copy(camGoal);
+      camera.lookAt(heroPos.x + fx * 5 + rx * 0.75, 0.9, heroPos.z + fz * 5 + rz * 0.75);
+      return;
+    }
     const aspect = renderer.domElement.clientWidth / Math.max(1, renderer.domElement.clientHeight);
     const vfov = THREE.MathUtils.degToRad(camera.fov);
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * aspect);
@@ -323,7 +398,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     const dist = Math.max(needW, needD) * 1.02;
     if (menu) {
       const a = menuSpin;
-      camera.position.set(Math.sin(a) * 15, 9, Math.cos(a) * 15);
+      camera.position.set(Math.sin(a) * 19, 11, Math.cos(a) * 19);
       camera.lookAt(0, 0, 0);
       return;
     }
@@ -355,14 +430,18 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   const tmp = new THREE.Vector3();
   function worldToScreen(x, y, z) {
     tmp.set(x, y, z).project(camera);
+    const behind = tmp.z > 1;
+    if (behind) { tmp.x = -tmp.x; tmp.y = -tmp.y; } // points behind the camera project mirrored
     const r = renderer.domElement.getBoundingClientRect();
-    return { x: r.left + ((tmp.x + 1) / 2) * r.width, y: r.top + ((1 - tmp.y) / 2) * r.height, inside: Math.abs(tmp.x) <= 1 && Math.abs(tmp.y) <= 1 };
+    return { x: r.left + ((tmp.x + 1) / 2) * r.width, y: r.top + ((1 - tmp.y) / 2) * r.height, inside: !behind && Math.abs(tmp.x) <= 1 && Math.abs(tmp.y) <= 1 };
   }
 
+  const dummy = new THREE.Object3D();
   function setAim(points) {
     if (!proj) return;
     const on = !!points && points.length > 1;
     proj.aim.visible = proj.aimEnd.visible = on;
+    proj.dots.count = 0;
     if (!on) return;
     const n = Math.min(points.length, AIM_MAX);
     const arr = proj.aim.geometry.attributes.position.array;
@@ -372,6 +451,10 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     proj.aim.computeLineDistances();
     const last = points[n - 1];
     proj.aimEnd.position.set(last.x, 0.04, last.z);
+    let k = 0;
+    for (let i = 1; i < n; i += 2) { dummy.position.set(points[i].x, 0.35, points[i].z); dummy.updateMatrix(); proj.dots.setMatrixAt(k++, dummy.matrix); }
+    proj.dots.count = k;
+    proj.dots.instanceMatrix.needsUpdate = true;
   }
 
   // Drop everything left over from the previous run (enemy ids restart at 1 in a new game).
@@ -381,10 +464,17 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     for (const q of particles) { scene.remove(q.m); q.m.material.dispose(); }
     enemyViews.clear(); dying.length = 0; particles.length = 0; pending.clear();
     if (proj) { proj.filled = 0; setAim(null); }
-    if (hero) { hero.current = null; animate(hero, 'holding-right', 0); }
+    if (hero) { hero.current = null; animate(hero, 'Idle', 0); }
+  }
+
+  function setView(mode) {
+    view = mode;
+    camera.fov = mode === 'tps' ? 62 : 46;
+    camera.updateProjectionMatrix();
+    placeCamera();
   }
 
   function setMenu(on) { menu = on; placeCamera(); if (hero) hero.obj.visible = !on; if (proj) proj.group.visible = false; }
 
-  return { setLocation, sync, render, resize, effect, screenToGround, worldToScreen, setMenu, clearRun, setAim, renderer };
+  return { setLocation, sync, render, resize, effect, screenToGround, worldToScreen, setMenu, setView, clearRun, setAim, renderer };
 }

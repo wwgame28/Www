@@ -98,7 +98,7 @@ const STEPS = {
       p.events.push('bounce');
       if (p.bounces > 3 + p.extraBounces) drop(p);
     }
-    if (p.t > 3 + p.extraBounces * 0.8) drop(p);
+    if (p.t > 4 + p.extraBounces * 0.8) drop(p);
   },
 
   boomerang(p, dt, world) {
