@@ -1,10 +1,10 @@
 import { createRng } from './rng.js';
 
 export const ENEMY_TYPES = {
-  grunt: { speed: 1.6, hp: 1, r: 0.4, from: 1, model: ['character-b', 'character-c'], scale: 1 },
-  runner: { speed: 3.0, hp: 1, r: 0.35, from: 3, model: ['character-e'], scale: 0.85 },
-  tank: { speed: 1.1, hp: 2, r: 0.55, from: 5, model: ['character-g'], scale: 1.3 },
-  splitter: { speed: 1.8, hp: 1, r: 0.45, from: 7, model: ['character-h', 'character-k'], scale: 1.05 },
+  grunt: { speed: 1.6, hp: 1, r: 0.4, from: 1, model: ['Barbarian'], scale: 1 },
+  runner: { speed: 3.0, hp: 1, r: 0.35, from: 3, model: ['Rogue_Hooded'], scale: 0.9 },
+  tank: { speed: 1.1, hp: 2, r: 0.55, from: 5, model: ['Knight'], scale: 1.3 },
+  splitter: { speed: 1.8, hp: 1, r: 0.45, from: 7, model: ['Mage'], scale: 1.05 },
   ufo: { speed: 2.2, hp: 1, r: 0.5, from: 9, model: ['enemy-ufo-a'], scale: 1, flying: true },
 };
 

@@ -101,6 +101,17 @@
   #stick.active { opacity: 1; border-color: rgba(255,255,255,.75); }
   #stick i { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; background: rgba(255,255,255,.8); box-shadow: 0 3px 8px rgba(0,0,0,.35); }
   body.stick-right #stick { left: auto; right: calc(28px + var(--safe-r)); }
+  #fireBtn { position: absolute; right: calc(28px + var(--safe-r)); bottom: calc(46px + var(--safe-b)); width: 112px; height: 112px; border-radius: 50%; display: none; place-items: center; font-size: 40px; color: var(--ink); background: radial-gradient(circle at 50% 40%, #ffe27a, var(--gold) 60%, var(--gold-dark)); box-shadow: inset 0 -6px 0 rgba(0,0,0,.2), 0 6px 18px rgba(0,0,0,.35); pointer-events: none; opacity: .9; transition: transform .08s, opacity .15s; }
+  #fireBtn.active { transform: scale(.92); opacity: 1; }
+  #fireBtn.empty { filter: grayscale(.9) brightness(.8); }
+  body.tps #fireBtn { display: grid; }
+  body.tps.stick-right #fireBtn { right: auto; left: calc(28px + var(--safe-l)); }
+  body.tps #ammo { bottom: calc(176px + var(--safe-b)); }
+  body.tps.stick-right #ammo { left: calc(16px + var(--safe-l)); }
+  #crosshair { position: absolute; width: 46px; height: 46px; margin: -23px 0 0 -23px; background: url(assets/ui/crosshair.svg) center/contain no-repeat; pointer-events: none; display: none; opacity: .45; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+  #crosshair.ready { opacity: .95; }
+  body.tps #crosshair { display: block; }
+  body.tps #hint { bottom: auto; top: calc(96px + var(--safe-t)); }
   #aim { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; background: url(assets/ui/crosshair.svg) center/contain no-repeat; pointer-events: none; opacity: 0; }
   #aim.go { animation: aim .45s ease-out; }
   #banner { position: absolute; left: 0; right: 0; top: 34%; text-align: center; font-size: 34px; font-weight: 900; color: var(--gold); text-shadow: 0 4px 0 var(--gold-dark), 0 8px 20px rgba(0,0,0,.5); pointer-events: none; opacity: 0; }
@@ -207,10 +218,11 @@
   <div class="topbar"><button class="btn icon ghost" data-go="menu" aria-label="Назад">‹</button><h2>Настройки</h2></div>
   <div class="stack">
     <div class="setting">Звук <button id="soundToggle" class="toggle" aria-label="Звук"></button></div>
+    <div class="setting">Вид от 3-го лица <button id="viewToggle" class="toggle" aria-label="Вид от третьего лица"></button></div>
     <div class="setting">Джойстик справа <button id="stickToggle" class="toggle" aria-label="Джойстик справа"></button></div>
     <div class="setting">Красивая графика <button id="qualityToggle" class="toggle" aria-label="Качество графики"></button></div>
     <p class="note">Выключите красивую графику, если iPhone греется или садится батарея. Применится после перезапуска.</p>
-    <p class="note">Модели и небо: Kenney (kenney.nl), CC0.</p>
+    <p class="note">Модели и небо: Kenney (kenney.nl) и KayKit (Kay Lousberg), CC0.</p>
   </div>
 </section>
 
@@ -221,6 +233,8 @@
     <button id="pauseBtn" class="btn icon ghost" aria-label="Пауза">❚❚</button>
   </div>
   <div id="stick"><i></i></div>
+  <div id="fireBtn" aria-hidden="true">✦</div>
+  <div id="crosshair"></div>
   <div id="aim"></div>
   <div id="arrow"></div>
   <div id="banner"></div>

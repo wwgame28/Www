@@ -1,7 +1,7 @@
 import { createRng } from './rng.js';
 
 // Arena is centered on the origin: x in [-W, W], z in [-D, D] (−z is the top of the screen).
-export const ARENA = { W: 6, D: 10 };
+export const ARENA = { W: 8, D: 12 };
 
 // `obstacles` are solid circles (bounce + block); `decor` is visual only.
 // `fit` is the footprint radius a model is scaled to, so kits with different units line up.
@@ -9,7 +9,7 @@ export const LOCATIONS = [
   {
     id: 'forest', name: 'Лес', unlockWave: 0, sky: 'day',
     ground: 0x6fb35a, wall: 0x4a7a3a, fog: 0xbfe3a8, light: 1.0,
-    obstacleCount: 7,
+    obstacleCount: 11,
     obstacles: [
       { kit: 'nature', model: 'tree_oak', r: 0.7 },
       { kit: 'nature', model: 'tree_default', r: 0.6 },
@@ -27,7 +27,7 @@ export const LOCATIONS = [
   {
     id: 'cave', name: 'Пещера', unlockWave: 5, sky: 'night',
     ground: 0x5a5560, wall: 0x3a3640, fog: 0x1c1a22, light: 0.35,
-    obstacleCount: 9,
+    obstacleCount: 13,
     obstacles: [
       { kit: 'nature', model: 'rock_tallA', r: 0.6 },
       { kit: 'nature', model: 'rock_tallC', r: 0.6 },
@@ -41,7 +41,7 @@ export const LOCATIONS = [
   {
     id: 'winter', name: 'Зимняя деревня', unlockWave: 10, sky: 'morning',
     ground: 0xe8f1f8, wall: 0xa9c4d8, fog: 0xdfeaf3, light: 1.0,
-    obstacleCount: 7,
+    obstacleCount: 11,
     obstacles: [
       { kit: 'holiday', model: 'tree-snow-a', r: 0.6 },
       { kit: 'holiday', model: 'tree-snow-b', r: 0.6 },
@@ -59,7 +59,7 @@ export const LOCATIONS = [
   {
     id: 'river', name: 'Река у крепости', unlockWave: 15, sky: 'alien',
     ground: 0x8bbf5c, wall: 0x6b5a45, fog: 0xc9dcae, light: 1.0,
-    obstacleCount: 6,
+    obstacleCount: 9,
     obstacles: [
       { kit: 'towerdefense', model: 'tower-round-base', r: 0.7 },
       { kit: 'towerdefense', model: 'detail-tree-large', r: 0.6 },

@@ -25,6 +25,13 @@ Top-down 3D arena (camera tilted ~55°). The hero has **one projectile**. Firing
 - **Aim line:** holding a finger (outside the joystick) for ≥ 120 ms shows the real trajectory (same step function as the game, enemies ignored); releasing fires. A quick tap still fires at once. The joystick is fixed in the bottom corner (right side optional).
 - **Upgrades:** after each cleared wave the game pauses and offers 3 of: +1 bounce (ricochet/snake/lightning), bigger projectile (+35 %, also scales black-hole radius), faster projectile (+20 %), faster hero (+12 %), magnet (dropped projectile crawls to you), long reach (catch/pickup radius +50 %), shield (survive one touch). Offers are seeded by run seed + wave, so a daily run offers everyone the same choices.
 
+## Third-person view (v1.2, default)
+- Camera behind the right shoulder (5.4 m back, 3.4 m up, FOV 62°), smoothed; the top-down view stays available in settings ("Вид от 3-го лица").
+- Left fixed joystick moves relative to the camera; dragging anywhere else turns the camera (yaw only); a fixed fire button fires straight ahead (8 m target, fixed crosshair). Holding the fire button shows the aim line; dragging it also turns the camera.
+- Obstacles between the camera and the hero fade to 22 % opacity.
+- Characters: KayKit Adventurers (CC0, skinned). Hero = Rogue with strafe/backpedal clips chosen from the move direction relative to facing; enemies = Barbarian (grunt), Rogue Hooded (runner), Knight (tank), Mage (splitter). Files pruned to the used clips (≈ 2.1 MB for all five).
+- Arena grown to 16 × 24 m with more obstacles so the camera has room.
+
 ## Scoring
 - k-th kill within the same shot scores `10·k` (combo), times 2 if the shot followed an in-flight catch.
 - Wave cleared: `+50·wave`.
