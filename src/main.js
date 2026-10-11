@@ -5,6 +5,7 @@ import { createGame, step, result, choosePerk } from './game.js';
 import { getPerk, PERKS } from './perks.js';
 import { LOCATIONS, getLocation, layoutFor } from './locations.js';
 import { previewPath } from './weapons.js';
+import { pickTarget } from './aim.js';
 import { HEROES, getHero } from './heroes.js';
 import { createRng, todayKey } from './rng.js';
 import { challengeFromHash, challengeUrl } from './share.js';
@@ -26,8 +27,9 @@ document.body.classList.toggle('tps', viewMode() === 'tps');
 const view = createRenderer(canvas, { quality: data.settings.quality });
 view.setView(viewMode());
 let yaw = 0; // third-person camera heading (0 looks toward −z, where most enemies come from)
-const LOOK_SENS = 0.0065;
 const AIM_DIST = 8;
+const EDGE_TURN = 2.5;    // rad/s while a turning finger rests at the screen edge
+const FIRE_BUFFER = 0.2;  // a press up to 0.2 s before the projectile is back still fires
 const forward = () => ({ x: -Math.sin(yaw), z: -Math.cos(yaw) });
 const aheadOfHero = () => { const f = forward(); return { x: game.hero.x + f.x * AIM_DIST, z: game.hero.z + f.z * AIM_DIST }; };
 // Stick (screen right/down) → world direction: relative to the camera in third person.
@@ -48,6 +50,31 @@ let heroKey = '';            // which hero model is currently loaded
 let browse = 0;              // hero index shown on the heroes screen
 let overTimer = 0;
 let hintShown = false;
+let queued = null;         // fire press waiting for the projectile to come back: { tap, t }
+let lock = null;           // enemy the third-person crosshair has locked (setting «Автоприцел»)
+let cross = null;          // smoothed crosshair position on screen
+let shot = { kills: 0, points: 0 }; // this shot's kills, for the combo total when it ends
+let killSound = 0;         // several kills in one step play one sound, at the highest combo
+let lastKill = 0;
+
+// Hit-stop and slow motion in real seconds: segments { k: time factor, t: duration } played in order.
+const timeFx = [];
+function warp(dt) {
+  while (timeFx.length && timeFx[0].t <= 0) timeFx.shift();
+  if (!timeFx.length) return 1;
+  timeFx[0].t -= dt;
+  return timeFx[0].k;
+}
+const freeze = (t) => { if (timeFx[0]?.k === 0) timeFx[0].t += t; else timeFx.unshift({ k: 0, t }); };
+const slowMo = (k, t) => timeFx.push({ k, t });
+
+// Third person: the locked enemy, else straight ahead.
+const shotTarget = () => (lock ? { x: lock.x, z: lock.z } : aheadOfHero());
+function updateLock() {
+  lock = viewMode() === 'tps' && data.settings.aimAssist !== false && !game.over
+    ? pickTarget(game.hero, forward(), game.enemies, game.solids, lock?.id, (e) => view.worldToScreen(e.x, 0.8, e.z).inside)
+    : null;
+}
 
 const daily = (date) => {
   const rng = createRng(`daily:${date}`);
@@ -114,6 +141,8 @@ async function start(kind) {
   view.clearRun();
   view.setMenu(false);
   view.resize();
+  audio.setVoice(getHero(run.heroId).proj.orb ? 'zap' : 'whoosh');
+  timeFx.length = 0; queued = null; lock = null; cross = null; shot = { kills: 0, points: 0 };
   $('score').textContent = '0';
   $('wave').textContent = 'Волна 1';
   yaw = 0;
@@ -175,34 +204,56 @@ async function share() {
 
 // ---------- events from the simulation ----------
 function handle(ev) {
-  audio.play(ev);
+  if (ev.type !== 'kill') audio.play(ev);
   view.effect(ev);
   if (ev.type === 'kill') {
     const s = view.worldToScreen(ev.x, 1.2, ev.z);
-    popup(s.x, s.y, ev.combo > 1 ? `+${ev.points} ×${ev.combo}` : `+${ev.points}`, ev.combo > 1 ? 'combo' : '');
+    const cls = ev.combo >= 5 ? 'combo c5' : ev.combo >= 3 ? 'combo c3' : ev.combo > 1 ? 'combo' : '';
+    popup(s.x, s.y, ev.combo > 1 ? `+${ev.points} ×${ev.combo}` : `+${ev.points}`, cls);
+    killSound = Math.max(killSound, ev.combo);
+    shot.kills++; shot.points += ev.points;
+    const now = performance.now();
+    freeze(now - lastKill < 250 ? 0.025 : 0.045); // hit-stop; shorter inside a fast chain
+    lastKill = now;
+    if (ev.combo === 4) slowMo(0.5, 0.3);
+  } else if (ev.type === 'explode') {
+    freeze(0.08);
   } else if (ev.type === 'wave') {
     $('wave').textContent = `Волна ${ev.wave}`;
     banner(`Волна ${ev.wave}`);
   } else if (ev.type === 'waveClear') {
     banner(`+${ev.bonus}`);
+    slowMo(0.3, 0.45); // the last kill of a wave plays in slow motion
   } else if (ev.type === 'catch') {
     const s = view.worldToScreen(ev.x, 1.4, ev.z);
     popup(s.x, s.y, 'Поймал! ×2', 'combo');
-  } else if (ev.type === 'shoot' && !hintShown) {
-    hintShown = true;
-    $('hint').style.opacity = 0;
+  } else if (ev.type === 'shoot') {
+    shot = { kills: 0, points: 0 };
+    if (!hintShown) { hintShown = true; $('hint').style.opacity = 0; }
   } else if (ev.type === 'death') {
-    overTimer = 1.1;
+    overTimer = 1.4; // real seconds: a short freeze, then the fall in slow motion
+    timeFx.length = 0;
+    timeFx.push({ k: 0, t: 0.15 }, { k: 0.35, t: 0.6 });
   } else if (ev.type === 'perkChoice') {
     mode = 'choosing';
-    input.setEnabled(false);
+    input.setEnabled(false, { keepStick: true });
     view.setAim(null);
-    setTimeout(() => showPerks(ev.options), 650); // let the wave-clear banner play first
+    setTimeout(() => showPerks(ev.options), 900); // let the slow-motion last kill and the banner play first
   } else if (ev.type === 'shield') {
     const s = view.worldToScreen(ev.x, 1.2, ev.z);
     popup(s.x, s.y, 'Щит!', 'combo');
     renderPerkRow();
+    freeze(0.09);
   }
+}
+
+// When a shot ends with 2+ kills, show its total over the hero.
+function endShot() {
+  if (shot.kills >= 2) {
+    const s = view.worldToScreen(game.hero.x, 2.2, game.hero.z);
+    popup(s.x, s.y, `Комбо ×${shot.kills} · +${shot.points}`, 'total');
+  }
+  shot = { kills: 0, points: 0 };
 }
 
 function updateHud() {
@@ -222,7 +273,7 @@ function updateHud() {
     const k = Math.min((w / 2 - m) / Math.abs(Math.cos(a) || 1e-6), (h / 2 - m) / Math.abs(Math.sin(a) || 1e-6));
     arrow.style.display = 'block';
     arrow.style.left = `${cx + Math.cos(a) * k - 12}px`;
-    arrow.style.top = `${cy + Math.sin(a) * k - 11}px`;
+    arrow.style.top = `${Math.min(innerHeight - 260, cy + Math.sin(a) * k) - 11}px`; // above the stick and fire button
     arrow.style.transform = `rotate(${a + Math.PI / 2}rad)`;
   } else arrow.style.display = 'none';
   // Fixed joystick: only the knob moves, clamped to the ring.
@@ -235,6 +286,7 @@ function updateHud() {
   }
   el.classList.toggle('active', !!st);
   $('fireBtn').classList.toggle('active', input.firing());
+  $('fireBtn').classList.toggle('cancel', input.cancelling());
   $('fireBtn').classList.toggle('empty', game.projectile.state !== 'held');
   el.firstElementChild.style.transform = `translate(${kx}px, ${ky}px)`;
 }
@@ -267,16 +319,20 @@ function renderPerkRow() {
   $('perkRow').innerHTML = PERKS.filter((p) => game?.mods[p.id]).map((p) => `<span>${p.icon}${game.mods[p.id] > 1 ? game.mods[p.id] : ''}</span>`).join('');
 }
 
-// Third person: the crosshair sits where a shot straight ahead is aimed.
-function placeCrosshair() {
-  const t = aheadOfHero(), s = view.worldToScreen(t.x, 0.6, t.z), el = $('crosshair');
-  el.style.left = `${s.x}px`; el.style.top = `${s.y}px`;
+// Third person: the crosshair sits where a shot straight ahead is aimed, or on the locked enemy.
+function placeCrosshair(dt) {
+  const t = lock || aheadOfHero(), s = view.worldToScreen(t.x, lock ? 0.8 : 0.6, t.z), el = $('crosshair');
+  if (!cross) cross = { x: s.x, y: s.y };
+  const k = 1 - Math.exp(-25 * dt);
+  cross.x += (s.x - cross.x) * k; cross.y += (s.y - cross.y) * k;
+  el.style.left = `${cross.x}px`; el.style.top = `${cross.y}px`;
   el.classList.toggle('ready', game.projectile.state === 'held');
+  el.classList.toggle('lock', !!lock);
 }
 
 function updateHint() {
   $('hint').textContent = viewMode() === 'tps'
-    ? 'Джойстик — бежать. Веди по экрану — поворот. Кнопка — выстрел (зажми — прицел).'
+    ? 'Джойстик — бежать. Веди по экрану — поворот. Кнопка — выстрел (зажми — прицел, потяни вниз — отмена).'
     : 'Джойстик — бежать. Зажми палец — прицел, отпусти — выстрел.';
 }
 
@@ -287,27 +343,38 @@ function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   if (document.hidden) return;
+  const k = mode === 'paused' ? 0 : warp(dt); // hit-stop / slow motion
   if (mode === 'playing' && game) {
-    acc += dt;
+    acc += dt * k;
     while (acc >= STEP) {
       acc -= STEP;
-      let fire = null;
       const tap = input.takeFire();
-      if (tap?.forward) fire = aheadOfHero();
-      else if (tap) { fire = view.screenToGround(tap.x, tap.y); aimAt(tap.x, tap.y); }
+      if (tap) queued = { tap, t: FIRE_BUFFER };
+      let fire = null;
+      if (queued && game.projectile.state === 'held') {
+        const q = queued.tap;
+        queued = null;
+        if (q.forward) fire = shotTarget();
+        else { fire = view.screenToGround(q.x, q.y); aimAt(q.x, q.y); }
+      } else if (queued && (queued.t -= STEP) <= 0) queued = null;
+      const wasFlying = game.projectile.state === 'flying';
       step(game, STEP, { move: moveVector(), fire });
       for (const ev of game.events) handle(ev);
       game.events.length = 0;
+      if (killSound) { audio.play({ type: 'kill', combo: killSound }); killSound = 0; }
+      if (wasFlying && game.projectile.state !== 'flying') endShot();
+      if (timeFx[0]?.k === 0) { acc = 0; break; } // a hit-stop just started: freeze on this frame
     }
-    yaw -= input.takeLook() * LOOK_SENS;
-    // Aim line: the real trajectory toward the held finger (or straight ahead in third person).
+    yaw -= input.takeLook() + input.edgeTurn() * EDGE_TURN * dt;
+    updateLock();
+    // Aim line: the real trajectory toward the held finger (or the crosshair target in third person).
     const aim = game.projectile.state === 'held' && !game.over ? input.aim() : null;
-    const target = aim && (aim.forward ? aheadOfHero() : view.screenToGround(aim.x, aim.y));
+    const target = aim && (aim.forward ? shotTarget() : view.screenToGround(aim.x, aim.y));
     view.setAim(target ? previewPath(game.weapon.id, game.hero, target, { arena: game.arena, solids: game.solids, rule: game.loc.rule }, game.mods) : null);
     updateHud();
   }
-  if (game && mode !== 'menu') view.sync(game, mode === 'paused' ? 0 : dt, { yaw });
-  if (game && mode === 'playing' && viewMode() === 'tps') placeCrosshair();
+  if (game && mode !== 'menu') view.sync(game, dt * k, { yaw });
+  if (game && mode === 'playing' && viewMode() === 'tps') placeCrosshair(dt);
   if (mode === 'playing' && game?.over) {
     overTimer -= dt;
     if (overTimer <= 0) finish();
@@ -368,6 +435,7 @@ const toggle = (id, on, onChange) => {
 };
 toggle('soundToggle', data.settings.sound, (v) => { data.settings.sound = v; audio.setMuted(!v); });
 toggle('viewToggle', viewMode() === 'tps', (v) => { data.settings.view = v ? 'tps' : 'top'; document.body.classList.toggle('tps', v); view.setView(viewMode()); updateHint(); });
+toggle('aimToggle', data.settings.aimAssist !== false, (v) => { data.settings.aimAssist = v; });
 toggle('stickToggle', !!data.settings.stickRight, (v) => { data.settings.stickRight = v; document.body.classList.toggle('stick-right', v); });
 toggle('qualityToggle', data.settings.quality === 'high', (v) => { data.settings.quality = v ? 'high' : 'low'; toast('Применится после перезапуска'); });
 

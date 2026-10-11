@@ -30,7 +30,7 @@ test('old weapon ids and missing ids resolve to a hero', () => {
 
 test('every location and enemy model exists on disk', () => {
   for (const l of LOCATIONS) {
-    for (const m of [...l.obstacles, ...l.decor]) assert.ok(existsSync(asset(m.kit, m.model)), `${l.id}: ${m.kit}/${m.model}`);
+    for (const m of [...layoutFor(l).solids, ...l.decor]) assert.ok(existsSync(asset(m.kit, m.model)), `${l.id}: ${m.kit}/${m.model}`);
     assert.ok(layoutFor(l).solids.length >= 6, `${l.id} has room for obstacles`);
   }
   for (const [type, t] of Object.entries(ENEMY_TYPES)) {

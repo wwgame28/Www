@@ -1,3 +1,4 @@
+import { solidContact } from './solid.js';
 // Each weapon is one projectile with its own trajectory. Simulation only — no rendering here.
 // A projectile is `flying` until its trajectory ends, then `dropped` (pick it up) or back in hand.
 
@@ -20,7 +21,7 @@ const norm = (x, z) => {
   return [x / l, z / l];
 };
 
-// Reflect a moving point off the arena walls and circular solids. Returns true if it bounced.
+// Reflect a moving point off the arena walls and the solids (rounded boxes). Returns true if it bounced.
 export function bounce(p, world) {
   const { W, D } = world.arena;
   const PR = p.r || PROJECTILE_R;
@@ -36,15 +37,12 @@ export function bounce(p, world) {
   if (p.z < -D + PR) { p.z = -D + PR; p.vz = Math.abs(p.vz); hit = true; }
   if (p.z > D - PR) { p.z = D - PR; p.vz = -Math.abs(p.vz); hit = true; }
   for (const o of world.solids) {
-    const dx = p.x - o.x, dz = p.z - o.z;
-    const dist = Math.hypot(dx, dz), min = o.r + PR;
-    if (dist < min && dist > 1e-6) {
-      const nx = dx / dist, nz = dz / dist;
-      const dot = p.vx * nx + p.vz * nz;
-      if (dot < 0) { p.vx -= 2 * dot * nx; p.vz -= 2 * dot * nz; }
-      p.x = o.x + nx * min; p.z = o.z + nz * min;
-      hit = true;
-    }
+    const c = solidContact(o, p.x, p.z, PR);
+    if (!c) continue;
+    const dot = p.vx * c.nx + p.vz * c.nz;
+    if (dot < 0) { p.vx -= 2 * dot * c.nx; p.vz -= 2 * dot * c.nz; }
+    p.x += c.nx * c.pen; p.z += c.nz * c.pen;
+    hit = true;
   }
   return hit;
 }

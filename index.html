@@ -105,12 +105,16 @@
   #fireBtn { position: absolute; right: calc(28px + var(--safe-r)); bottom: calc(46px + var(--safe-b)); width: 112px; height: 112px; border-radius: 50%; display: none; place-items: center; font-size: 40px; color: var(--ink); background: radial-gradient(circle at 50% 40%, #ffe27a, var(--gold) 60%, var(--gold-dark)); box-shadow: inset 0 -6px 0 rgba(0,0,0,.2), 0 6px 18px rgba(0,0,0,.35); pointer-events: none; opacity: .9; transition: transform .08s, opacity .15s; }
   #fireBtn.active { transform: scale(.92); opacity: 1; }
   #fireBtn.empty { filter: grayscale(.9) brightness(.8); }
+  #fireBtn.cancel { filter: grayscale(1); }
+  #fireBtn.cancel::after { content: '✕'; position: absolute; inset: 0; display: grid; place-items: center; border-radius: 50%; background: rgba(20,24,43,.6); color: var(--coral); font-size: 46px; }
   body.tps #fireBtn { display: grid; }
   body.tps.stick-right #fireBtn { right: auto; left: calc(28px + var(--safe-l)); }
   body.tps #ammo { bottom: calc(176px + var(--safe-b)); }
   body.tps.stick-right #ammo { left: calc(16px + var(--safe-l)); }
   #crosshair { position: absolute; width: 46px; height: 46px; margin: -23px 0 0 -23px; background: url(assets/ui/crosshair.svg) center/contain no-repeat; pointer-events: none; display: none; opacity: .45; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
   #crosshair.ready { opacity: .95; }
+  #crosshair { transition: transform .12s, filter .12s; }
+  #crosshair.lock { transform: scale(.8); filter: drop-shadow(0 0 4px #ff5a4d) drop-shadow(0 0 2px #ff5a4d); }
   body.tps #crosshair { display: block; }
   body.tps #hint { bottom: auto; top: calc(96px + var(--safe-t)); }
   #aim { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; background: url(assets/ui/crosshair.svg) center/contain no-repeat; pointer-events: none; opacity: 0; }
@@ -120,6 +124,9 @@
   #hint { position: absolute; left: 50%; bottom: calc(196px + var(--safe-b)); transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); text-align: center; color: #fff; font-weight: 800; font-size: 15px; background: rgba(20,24,43,.7); padding: 10px 16px; border-radius: 14px; pointer-events: none; transition: opacity .4s; }
   .pop { position: absolute; transform: translate(-50%, -50%); font-weight: 900; font-size: 22px; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.45); pointer-events: none; animation: rise .8s ease-out forwards; white-space: nowrap; }
   .pop.combo { color: var(--gold); font-size: 28px; }
+  .pop.c3 { color: #ff9a3a; font-size: 34px; }
+  .pop.c5 { color: #ff5ad1; font-size: 40px; }
+  .pop.total { font-size: 22px; background: rgba(20,24,43,.78); padding: 6px 14px; border-radius: 14px; animation-duration: 1.2s; }
 
   #perkRow { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; max-width: 220px; }
   #perkRow span { background: rgba(20,24,43,.6); border-radius: 10px; padding: 3px 7px; font-size: 13px; font-weight: 800; }
@@ -254,6 +261,7 @@
   <div class="stack">
     <div class="setting">Звук <button id="soundToggle" class="toggle" aria-label="Звук"></button></div>
     <div class="setting">Вид от 3-го лица <button id="viewToggle" class="toggle" aria-label="Вид от третьего лица"></button></div>
+    <div class="setting">Автоприцел <button id="aimToggle" class="toggle" aria-label="Автоприцел"></button></div>
     <div class="setting">Джойстик справа <button id="stickToggle" class="toggle" aria-label="Джойстик справа"></button></div>
     <div class="setting">Красивая графика <button id="qualityToggle" class="toggle" aria-label="Качество графики"></button></div>
     <p class="note">Выключите красивую графику, если iPhone греется или садится батарея. Применится после перезапуска.</p>

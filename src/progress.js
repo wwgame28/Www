@@ -2,7 +2,7 @@ import { HEROES, getHero } from './heroes.js';
 import { LOCATIONS, getLocation } from './locations.js';
 
 const KEY = 'ricochet:v1';
-const blank = () => ({ best: {}, bestWave: 0, bestScore: 0, daily: {}, settings: { sound: true, quality: 'high' }, hero: 'barbarian', location: 'forest' });
+const blank = () => ({ best: {}, bestWave: 0, bestScore: 0, daily: {}, settings: { sound: true, quality: 'high', aimAssist: true }, hero: 'barbarian', location: 'forest' });
 
 export function load(storage = globalThis.localStorage) {
   try {

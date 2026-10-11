@@ -2,10 +2,13 @@ import { ARENA, getLocation, layoutFor } from './locations.js';
 import { getWeapon, launch, stepProjectile, onEnemyHit, PROJECTILE_R } from './weapons.js';
 import { ENEMY_TYPES, planWave, speedFactor } from './waves.js';
 import { blankMods, offerPerks, applyPerk } from './perks.js';
+import { solidContact } from './solid.js';
 
 const HERO_SPEED = 5.2;
 const HERO_R = 0.4;
 const WAVE_BREAK = 1.6;
+const PICKUP_R = 1.1;  // hand reach for a dropped projectile (× long-reach perk)
+const VACUUM_R = 1.8;  // inside this the projectile flies to the hand by itself
 
 export function createGame({ seed, locationId, weaponId, heroId = null }) {
   const loc = getLocation(locationId);
@@ -62,9 +65,50 @@ const inRiver = (g, z) => {
 
 function pushOutOfSolids(g, b) {
   for (const o of g.solids) {
-    const dx = b.x - o.x, dz = b.z - o.z, d = Math.hypot(dx, dz), min = o.r + b.r;
-    if (d < min && d > 1e-6) { b.x = o.x + (dx / d) * min; b.z = o.z + (dz / d) * min; }
+    const c = solidContact(o, b.x, b.z, b.r);
+    if (c) { b.x += c.nx * c.pen; b.z += c.nz * c.pen; }
   }
+}
+
+// Walkers chase in a straight line, so a solid between them and the hero could hold them on its far
+// side forever (a wall's middle, a box face, dead center behind a pillar). A walker pressing into a
+// solid walks round it: the side is picked once on contact (the end with the shorter way to the hero)
+// and kept while it presses, so it never flip-flops. Deterministic: positions only.
+function slideAroundSolids(g, e, h, step) {
+  let o = null, c = null;
+  for (const s of g.solids) { c = solidContact(s, e.x, e.z, e.r + 0.02); if (c) { o = s; break; } }
+  const dx = h.x - e.x, dz = h.z - e.z, d = Math.hypot(dx, dz) || 1;
+  if (!o || (dx * c.nx + dz * c.nz) / d > -0.2) { e.slide = 0; return; }
+  const tx = -c.nz, tz = c.nx; // tangent: round the solid counter-clockwise
+  if (!o.hx && !o.hz && Math.abs(dx * tx + dz * tz) / d > 0.05) { e.slide = 0; return; } // round pillars: the chase slides off by itself unless dead center
+  if (!e.slide || e.slideOn !== o) {
+    e.slideOn = o;
+    let s = dx * tx + dz * tz >= 0 ? 1 : -1;
+    if (o.hx || o.hz) {
+      const cs = Math.cos(o.rot || 0), sn = Math.sin(o.rot || 0), hx = o.hx || 0, hz = o.hz || 0;
+      const useX = Math.max(hx, hz) > 1.5 * Math.min(hx, hz) + 0.2 ? hx >= hz : Math.abs(tx * cs - tz * sn) >= Math.abs(tx * sn + tz * cs);
+      const ux = useX ? cs : sn, uz = useX ? -sn : cs, ext = (useX ? hx : hz) + o.r + e.r + 0.05;
+      let best = Infinity;
+      for (const k of [1, -1]) {
+        const px = o.x + ux * ext * k, pz = o.z + uz * ext * k;
+        const len = Math.hypot(px - e.x, pz - e.z) + Math.hypot(h.x - px, h.z - pz) + (Math.abs(px) > g.arena.W || Math.abs(pz) > g.arena.D ? 50 : 0);
+        const side = (px - e.x) * tx + (pz - e.z) * tz;
+        if (len < best && Math.abs(side) > 1e-3) { best = len; s = side > 0 ? 1 : -1; }
+      }
+    }
+    e.slide = s;
+  }
+  e.x += tx * e.slide * step; e.z += tz * e.slide * step;
+}
+
+// Never rise inside a solid: slide the spawn point along its wall until it is 0.2 m clear.
+function clearSpot(g, pos, r, alongX) {
+  for (let k = 0; k <= 40; k++) {
+    const off = 0.15 * Math.ceil(k / 2) * (k % 2 ? 1 : -1);
+    const x = pos.x + (alongX ? off : 0), z = pos.z + (alongX ? 0 : off);
+    if (!g.solids.some((o) => solidContact(o, x, z, r + 0.2))) return { x, z };
+  }
+  return pos;
 }
 
 function killEnemy(g, e, p) {
@@ -73,10 +117,11 @@ function killEnemy(g, e, p) {
   const points = 10 * p.kills * g.shotMult;
   g.score += points;
   g.bestCombo = Math.max(g.bestCombo, p.kills);
-  emit(g, 'kill', { x: e.x, z: e.z, points, combo: p.kills, id: e.id });
+  emit(g, 'kill', { x: e.x, z: e.z, points, combo: p.kills, id: e.id, vx: p.vx, vz: p.vz, px: p.x, pz: p.z }); // render throws the body along the hit
   if (e.type === 'splitter') {
     for (const side of [-1, 1]) {
-      const child = addEnemy(g, 'runner', e.x + side * 0.5, e.z, 'Rogue_Hooded');
+      const child = addEnemy(g, 'runner', e.x + side * 0.5, e.z, ENEMY_TYPES.runner.model[0]);
+      child.split = true; // render pops it in (it doesn't rise from the ground)
       p.hits.add(child.id); // spawned by this shot — it can't be killed by the same pass
     }
   }
@@ -116,12 +161,13 @@ export function step(g, dt, input = {}) {
     g.shotMult = g.pendingMult;
     g.pendingMult = 1;
     h.facing = Math.atan2(input.fire.x - h.x, input.fire.z - h.z);
-    emit(g, 'shoot', { x: h.x, z: h.z, mult: g.shotMult });
+    emit(g, 'shoot', { x: h.x, z: h.z, mult: g.shotMult, tx: input.fire.x, tz: input.fire.z });
   }
   const proj = g.projectile;
   if (proj.state === 'held') { proj.x = h.x; proj.z = h.z; }
 
   const world = { arena: g.arena, solids: g.solids, enemies: g.enemies, hero: h, rule };
+  const wasFlying = proj.state === 'flying';
   stepProjectile(proj, dt, world);
   for (const ev of proj.events) emit(g, ev, { x: proj.x, z: proj.z });
   proj.events.length = 0;
@@ -144,11 +190,17 @@ export function step(g, dt, input = {}) {
     }
   }
 
-  // Magnet perk: a dropped projectile crawls toward the hero.
+  if (wasFlying && proj.state === 'dropped') emit(g, 'drop', { x: proj.x, z: proj.z });
+
+  // Getting the projectile back: within 1.8 m it hops into the hand on its own (8 m/s); the magnet
+  // perk reaches further and crawls it in.
   const dHero = Math.hypot(proj.x - h.x, proj.z - h.z);
-  if (proj.state === 'dropped' && g.mods.magnet && dHero < 2 + 2 * g.mods.magnet) {
-    const pull = (2 + 1.5 * g.mods.magnet) * dt / Math.max(dHero, 0.01);
-    proj.x += (h.x - proj.x) * pull; proj.z += (h.z - proj.z) * pull;
+  if (proj.state === 'dropped' && dHero > 1e-3) {
+    const speed = dHero < VACUUM_R ? 8 : g.mods.magnet && dHero < 2.5 + 2 * g.mods.magnet ? 2 + 1.5 * g.mods.magnet : 0;
+    if (speed) {
+      const k = Math.min(1, (speed * dt) / dHero);
+      proj.x += (h.x - proj.x) * k; proj.z += (h.z - proj.z) * k;
+    }
   }
   // Catch in flight (×2 next shot) or pick up from the floor.
   const reach = 1 + 0.5 * g.mods.reach;
@@ -156,7 +208,7 @@ export function step(g, dt, input = {}) {
     proj.state = 'held';
     g.pendingMult = 2;
     emit(g, 'catch', { x: h.x, z: h.z });
-  } else if (proj.state === 'dropped' && dHero < 0.85 * reach) {
+  } else if (proj.state === 'dropped' && Math.hypot(proj.x - h.x, proj.z - h.z) < PICKUP_R * reach) {
     proj.state = 'held';
     emit(g, 'pickup', { x: h.x, z: h.z });
   }
@@ -177,9 +229,13 @@ export function step(g, dt, input = {}) {
     while (g.queue.length && g.queue[0].at <= g.waveT) {
       const s = g.queue.shift();
       const flying = !!ENEMY_TYPES[s.type].flying;
-      const pos = spawnPos(g, s, flying);
+      let pos = spawnPos(g, s, flying);
+      // Never rise right next to the hero: mirror along the wall instead (still deterministic).
+      if (Math.hypot(pos.x - h.x, pos.z - h.z) < 3.5) pos = spawnPos(g, { ...s, along: -s.along }, flying);
+      if (!flying) pos = clearSpot(g, pos, ENEMY_TYPES[s.type].r, s.side === 'top' || s.side === 'bottom');
       const e = addEnemy(g, s.type, pos.x, pos.z, s.model);
       if (!flying) e.rise = RISE_TIME; // harmless and still while climbing out of the ground
+      emit(g, 'spawn', { x: e.x, z: e.z, id: e.id, flying, rise: e.rise });
     }
   }
 
@@ -200,7 +256,12 @@ export function step(g, dt, input = {}) {
         e.x += (px / pd) * f; e.z += (pz / pd) * f;
       }
     }
-    if (!e.flying) pushOutOfSolids(g, e);
+    if (!e.flying) {
+      pushOutOfSolids(g, e);
+      slideAroundSolids(g, e, h, sp * dt);
+      e.x = Math.max(-g.arena.W + e.r, Math.min(g.arena.W - e.r, e.x)); // a push never takes a walker through the wall
+      e.z = Math.max(-g.arena.D + e.r, Math.min(g.arena.D - e.r, e.z));
+    }
     if (d < e.r + h.r - 0.08) {
       if (g.mods.shield > 0) { // the shield takes the hit and destroys the attacker
         g.mods.shield--;
@@ -209,7 +270,8 @@ export function step(g, dt, input = {}) {
         continue;
       }
       g.over = true;
-      emit(g, 'death', { x: h.x, z: h.z });
+      g.killer = e.id;
+      emit(g, 'death', { x: h.x, z: h.z, by: e.id });
       return;
     }
   }
