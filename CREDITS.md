@@ -1,26 +1,35 @@
 # Credits
 
-All assets are licensed **CC0 1.0** (public domain; credit not required). License text verified in each pack's `License.txt`.
+All art assets are licensed **CC0 1.0** (public domain; credit not required). License text verified in each pack's `License.txt` / `LICENSE.txt`. Files were converted to compact GLBs (unused animations and props removed).
 
-**Characters and animations — KayKit, by Kay Lousberg** (https://kaylousberg.itch.io, source: https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0)
+**KayKit, by Kay Lousberg** — https://kaylousberg.itch.io · sources: https://github.com/KayKit-Game-Assets
 
 | Folder | Pack |
 |---|---|
-| `assets/kaykit/` | KayKit Character Pack: Adventurers 1.0 — Rogue, Barbarian, Knight, Mage, Rogue Hooded. Reduced to the animations the game uses; held props removed. |
+| `assets/heroes/` | Character Pack: Adventurers 1.0 — Barbarian, Knight, Mage, Rogue, Rogue Hooded (with their hand props) |
+| `assets/props/` | Character Pack: Adventurers 1.0 — axe, shield, dagger, sword (thrown projectiles) |
+| `assets/skeletons/` | Character Pack: Skeletons 1.0 — Minion, Rogue, Warrior, Mage |
+| `assets/dungeon/` | Dungeon Remastered 1.0 |
+| `assets/halloween/` | Halloween Bits 1.0 |
+| `assets/hex/` | Medieval Hexagon Pack 1.0 |
+| `assets/space/` | Space Base Bits 1.0 |
+| `assets/city/` | City Builder Bits 1.0 |
 
-**Everything else — Kenney** (https://kenney.nl)
+**Kenney** — https://kenney.nl
 
-| Folder | Kenney pack |
+| Folder | Pack |
 |---|---|
-| `assets/blaster/` | Blaster Kit 2.1 |
 | `assets/nature/` | Nature Kit |
-| `assets/cave/` | Modular Cave Kit 1.0 |
 | `assets/holiday/` | Holiday Kit |
-| `assets/towerdefense/` | Tower Defense Kit |
+| `assets/towerdefense/` | Tower Defense Kit (UFO enemy) |
 | `assets/sky/` | Skyboxes (downscaled to 2048×1024 JPEG) |
 | `assets/ui/crosshair.svg` | Crosshair Pack |
-| `assets/ui/*.png` | Previews from Blaster Kit |
+| `assets/ui/icon-*.png` | App icon made from a Blaster Kit preview |
 
-three.js r169 (`vendor/`) — MIT License, see `vendor/THREE-LICENSE`.
+**Code libraries** (`vendor/`, MIT License)
+
+- three.js r169 — `vendor/THREE-LICENSE`
+- three.quarks 0.16.0 + quarks.core 0.16.0 (particle effects) — `vendor/THREE-QUARKS-LICENSE`
+- postprocessing 6.39.5 (bloom, vignette) — `vendor/POSTPROCESSING-LICENSE.md`
 
 Sound effects are synthesized in code (`src/audio.js`).

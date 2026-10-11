@@ -32,6 +32,14 @@ Top-down 3D arena (camera tilted ~55°). The hero has **one projectile**. Firing
 - Characters: KayKit Adventurers (CC0, skinned). Hero = Rogue with strafe/backpedal clips chosen from the move direction relative to facing; enemies = Barbarian (grunt), Rogue Hooded (runner), Knight (tank), Mage (splitter). Files pruned to the used clips (≈ 2.1 MB for all five).
 - Arena grown to 16 × 24 m with more obstacles so the camera has room.
 
+## Heroes, skeletons, seven locations, effects (v1.3)
+- **Heroes replace the weapon list** (`src/heroes.js`). Each hero = KayKit model + one signature weapon (the existing trajectories) + what it holds + its projectile look + color: Варвар (ricochet axe, free), Маг камней (black-hole boulder, free), Рыцарь (boomerang shield, 300), Разбойник (snake dagger, 800), Следопыт (spiral blade, 1500), Маг молний (lightning, 2500), Маг огня (orbit fireball, 4000). The Mage model is tinted for the stone and fire mages. Old saves and challenge links with weapon ids map to the hero that carries that weapon.
+- **Heroes screen:** camera close-up on the hero in the current location, ‹ › flips heroes live, card shows weapon name, description and the real trajectory.
+- **Enemies are KayKit skeletons** (Minion, Rogue, Warrior, Mage). Walkers rise out of the ground just inside the walls; for 0.9 s they don't move or hurt (`rise`).
+- **Seven locations:** Лес, Город (cars as cover), Подземелье (dark, hero light, torches), Зимняя деревня (ice), Река у крепости (Medieval Hexagon props, reflective water on high quality), Кладбище (dense fog, candles, jack-o'-lanterns), Космостанция (portal walls: the projectile wraps to the opposite side).
+- **Effects:** three.quarks bursts (spark on bounce, hit on kill, big burst on explosion/death, ring on catch/pickup), a particle trail behind the projectile, flames on torches/candles/pumpkins. High quality adds bloom + vignette (postprocessing) and the Water shader; bloom is weaker on snow. If fps stays under 45 the pixel ratio steps down (never below 1).
+- **Portrait only:** landscape shows a rotate prompt and pauses; manifest asks for portrait.
+
 ## Scoring
 - k-th kill within the same shot scores `10·k` (combo), times 2 if the shot followed an in-flight catch.
 - Wave cleared: `+50·wave`.

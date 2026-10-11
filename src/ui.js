@@ -1,15 +1,8 @@
-import { WEAPONS, launch, stepProjectile } from './weapons.js';
+import { launch, stepProjectile } from './weapons.js';
 import { LOCATIONS, ARENA } from './locations.js';
-import { weaponUnlocked, locationUnlocked } from './progress.js';
+import { heroUnlocked, locationUnlocked } from './progress.js';
 
 export const $ = (id) => document.getElementById(id);
-
-const RULES = {
-  forest: 'Деревья и камни отражают пулю',
-  cave: 'Темно — свет только вокруг тебя',
-  winter: 'Лёд: скользишь, пуля катится',
-  river: 'Река замедляет всех',
-};
 
 export function show(id) {
   for (const s of document.querySelectorAll('.screen')) s.classList.toggle('on', s.id === id);
@@ -25,7 +18,7 @@ export function toast(text) {
 }
 
 // Draw the weapon's real trajectory (from the simulation) as a small preview.
-function drawTrajectory(canvas, weaponId) {
+function drawTrajectory(canvas, weaponId, color = '#ffd34d') {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   canvas.width = 54 * dpr; canvas.height = 72 * dpr;
   const c = canvas.getContext('2d');
@@ -37,7 +30,7 @@ function drawTrajectory(canvas, weaponId) {
   const hero = { x: 0, z: 5 };
   const world = { arena: ARENA, solids: [], enemies: [], hero, rule: {} };
   const p = launch(weaponId, hero, { x: 1.5, z: -6 });
-  c.strokeStyle = '#ffd34d'; c.lineWidth = 2; c.lineJoin = 'round';
+  c.strokeStyle = color; c.lineWidth = 2; c.lineJoin = 'round';
   c.beginPath();
   c.moveTo(...P(p.x, p.z));
   for (let i = 0; i < 400 && p.state === 'flying'; i++) { stepProjectile(p, 1 / 60, world); c.lineTo(...P(p.x, p.z)); }
@@ -46,32 +39,31 @@ function drawTrajectory(canvas, weaponId) {
   c.beginPath(); c.arc(...P(hero.x, hero.z), 3, 0, Math.PI * 2); c.fill();
 }
 
-export function renderWeapons(data, onPick) {
-  const list = $('weaponList');
-  list.innerHTML = '';
-  for (const w of WEAPONS) {
-    const open = weaponUnlocked(data, w);
-    const el = document.createElement('div');
-    el.className = `item${open ? '' : ' locked'}${data.weapon === w.id ? ' sel' : ''}`;
-    el.innerHTML = `<div class="pic"><img src="assets/ui/${w.model}.png" alt=""></div>
-      <div><h3>${w.name}</h3><p>${w.desc}</p>${open ? '' : `<span class="lock">🔒 Рекорд ${w.unlock}</span>`}</div>
-      <canvas aria-hidden="true"></canvas>`;
-    drawTrajectory(el.querySelector('canvas'), w.id);
-    el.addEventListener('click', () => (open ? onPick(w.id) : toast(`Наберите ${w.unlock} очков, чтобы открыть`)));
-    list.append(el);
-  }
+// Hero card under the 3D close-up: name, weapon, its real trajectory, lock state.
+export function renderHero(data, h, index, total) {
+  const open = heroUnlocked(data, h);
+  const hex = `#${h.color.toString(16).padStart(6, '0')}`;
+  $('heroName').textContent = h.name;
+  $('heroWeapon').textContent = h.weaponName;
+  $('heroWeapon').style.color = hex;
+  $('heroDesc').textContent = h.desc;
+  $('heroCount').textContent = `${index + 1} / ${total}`;
+  const pick = $('heroPick');
+  pick.disabled = false;
+  pick.classList.toggle('ghost', !open);
+  pick.textContent = !open ? `🔒 Рекорд ${h.unlock}` : data.hero === h.id ? 'Выбран ✓' : 'Играть за него';
+  drawTrajectory($('heroPath'), h.weapon, hex);
 }
 
 export function renderLocations(data, onPick) {
   const list = $('locationList');
   list.innerHTML = '';
-  const icons = { forest: '🌲', cave: '🪨', winter: '❄️', river: '🏰' };
   for (const l of LOCATIONS) {
     const open = locationUnlocked(data, l);
     const el = document.createElement('div');
     el.className = `item${open ? '' : ' locked'}${data.location === l.id ? ' sel' : ''}`;
-    el.innerHTML = `<div class="pic" style="font-size:34px">${icons[l.id]}</div>
-      <div><h3>${l.name}</h3><p>${RULES[l.id]}</p>${open ? '' : `<span class="lock">🔒 Дойдите до волны ${l.unlockWave}</span>`}</div>
+    el.innerHTML = `<div class="pic" style="font-size:34px">${l.icon}</div>
+      <div><h3>${l.name}</h3><p>${l.desc}</p>${open ? '' : `<span class="lock">🔒 Дойдите до волны ${l.unlockWave}</span>`}</div>
       <span class="chip">🏆 ${data.best[l.id] || 0}</span>`;
     el.addEventListener('click', () => (open ? onPick(l.id) : toast(`Дойдите до волны ${l.unlockWave}`)));
     list.append(el);
