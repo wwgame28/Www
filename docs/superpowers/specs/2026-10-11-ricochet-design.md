@@ -21,6 +21,10 @@ Top-down 3D arena (camera tilted ~55°). The hero has **one projectile**. Firing
 - **Pick up:** walk over a dropped projectile. **Catch in flight** (after 0.25 s) → next shot scores ×2.
 - **Death:** any enemy touching the hero. One life.
 
+## Aiming and upgrades (v1.1)
+- **Aim line:** holding a finger (outside the joystick) for ≥ 120 ms shows the real trajectory (same step function as the game, enemies ignored); releasing fires. A quick tap still fires at once. The joystick is fixed in the bottom corner (right side optional).
+- **Upgrades:** after each cleared wave the game pauses and offers 3 of: +1 bounce (ricochet/snake/lightning), bigger projectile (+35 %, also scales black-hole radius), faster projectile (+20 %), faster hero (+12 %), magnet (dropped projectile crawls to you), long reach (catch/pickup radius +50 %), shield (survive one touch). Offers are seeded by run seed + wave, so a daily run offers everyone the same choices.
+
 ## Scoring
 - k-th kill within the same shot scores `10·k` (combo), times 2 if the shot followed an in-flight catch.
 - Wave cleared: `+50·wave`.

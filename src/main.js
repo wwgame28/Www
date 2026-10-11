@@ -1,9 +1,10 @@
 import { createRenderer } from './render.js';
 import { createInput } from './input.js';
 import { createAudio } from './audio.js';
-import { createGame, step, result } from './game.js';
+import { createGame, step, result, choosePerk } from './game.js';
+import { getPerk, PERKS } from './perks.js';
 import { LOCATIONS, getLocation, layoutFor } from './locations.js';
-import { WEAPONS, getWeapon } from './weapons.js';
+import { WEAPONS, getWeapon, previewPath } from './weapons.js';
 import { createRng, todayKey } from './rng.js';
 import { challengeFromHash, challengeUrl } from './share.js';
 import * as progress from './progress.js';
@@ -13,11 +14,16 @@ const STEP = 1 / 60;
 const data = progress.load();
 const audio = createAudio();
 const canvas = $('game');
-const input = createInput(canvas);
+const stickCenter = () => {
+  const r = $('stick').getBoundingClientRect();
+  return r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+};
+const input = createInput(canvas, stickCenter);
+document.body.classList.toggle('stick-right', !!data.settings.stickRight);
 const view = createRenderer(canvas, { quality: data.settings.quality });
 audio.setMuted(!data.settings.sound);
 
-let mode = 'menu';           // menu | playing | paused | over
+let mode = 'menu';           // menu | playing | choosing | paused | over
 let game = null;
 let run = null;              // { kind: 'free'|'daily'|'challenge', seed, date, locationId, weaponId }
 let challenge = challengeFromHash(location.hash);
@@ -87,6 +93,7 @@ async function start(kind) {
   $('wave').textContent = 'Волна 1';
   $('hint').style.opacity = hintShown ? 0 : 1;
   $('pops').innerHTML = '';
+  renderPerkRow();
   show('hud');
   input.setEnabled(true);
   mode = 'playing';
@@ -159,6 +166,15 @@ function handle(ev) {
     $('hint').style.opacity = 0;
   } else if (ev.type === 'death') {
     overTimer = 1.1;
+  } else if (ev.type === 'perkChoice') {
+    mode = 'choosing';
+    input.setEnabled(false);
+    view.setAim(null);
+    setTimeout(() => showPerks(ev.options), 650); // let the wave-clear banner play first
+  } else if (ev.type === 'shield') {
+    const s = view.worldToScreen(ev.x, 1.2, ev.z);
+    popup(s.x, s.y, 'Щит!', 'combo');
+    renderPerkRow();
   }
 }
 
@@ -182,13 +198,44 @@ function updateHud() {
     arrow.style.top = `${cy + Math.sin(a) * k - 11}px`;
     arrow.style.transform = `rotate(${a + Math.PI / 2}rad)`;
   } else arrow.style.display = 'none';
+  // Fixed joystick: only the knob moves, clamped to the ring.
   const st = input.stick(), el = $('stick');
+  let kx = 0, ky = 0;
   if (st) {
-    el.style.display = 'block';
-    el.style.left = `${st.x0}px`; el.style.top = `${st.y0}px`;
-    const dx = Math.max(-60, Math.min(60, st.x - st.x0)), dy = Math.max(-60, Math.min(60, st.y - st.y0));
-    el.firstElementChild.style.transform = `translate(${dx}px, ${dy}px)`;
-  } else el.style.display = 'none';
+    kx = st.x - st.x0; ky = st.y - st.y0;
+    const l = Math.hypot(kx, ky);
+    if (l > 60) { kx *= 60 / l; ky *= 60 / l; }
+  }
+  el.classList.toggle('active', !!st);
+  el.firstElementChild.style.transform = `translate(${kx}px, ${ky}px)`;
+}
+
+// ---------- perks ----------
+function showPerks(options) {
+  if (mode !== 'choosing') return;
+  const list = $('perkList');
+  list.innerHTML = '';
+  for (const id of options) {
+    const p = getPerk(id), lvl = game.mods[id];
+    const b = document.createElement('button');
+    b.className = 'perk';
+    b.innerHTML = `<span class="ico">${p.icon}</span><span><h3>${p.name}</h3><p>${p.desc}</p></span><span class="lvl">${lvl ? `${lvl}→${lvl + 1}` : 'новое'}</span>`;
+    b.addEventListener('click', () => {
+      if (!choosePerk(game, id)) return;
+      audio.play({ type: 'catch' });
+      renderPerkRow();
+      mode = 'playing';
+      input.setEnabled(true);
+      last = performance.now();
+      show('hud');
+    }, { once: true });
+    list.append(b);
+  }
+  show('perks');
+}
+
+function renderPerkRow() {
+  $('perkRow').innerHTML = PERKS.filter((p) => game?.mods[p.id]).map((p) => `<span>${p.icon}${game.mods[p.id] > 1 ? game.mods[p.id] : ''}</span>`).join('');
 }
 
 // ---------- loop ----------
@@ -209,6 +256,10 @@ function frame(now) {
       for (const ev of game.events) handle(ev);
       game.events.length = 0;
     }
+    // Aim line: the real trajectory toward the held finger.
+    const aim = game.projectile.state === 'held' && !game.over ? input.aim() : null;
+    const target = aim && view.screenToGround(aim.x, aim.y);
+    view.setAim(target ? previewPath(game.weapon.id, game.hero, target, { arena: game.arena, solids: game.solids, rule: game.loc.rule }, game.mods) : null);
     updateHud();
   }
   if (game && mode !== 'menu') view.sync(game, mode === 'paused' ? 0 : dt);
@@ -250,6 +301,7 @@ const toggle = (id, on, onChange) => {
   el.addEventListener('click', () => { const v = !el.classList.contains('on'); el.classList.toggle('on', v); onChange(v); progress.save(data); });
 };
 toggle('soundToggle', data.settings.sound, (v) => { data.settings.sound = v; audio.setMuted(!v); });
+toggle('stickToggle', !!data.settings.stickRight, (v) => { data.settings.stickRight = v; document.body.classList.toggle('stick-right', v); });
 toggle('qualityToggle', data.settings.quality === 'high', (v) => { data.settings.quality = v ? 'high' : 'low'; toast('Применится после перезапуска'); });
 
 addEventListener('resize', () => view.resize());
@@ -260,6 +312,8 @@ document.addEventListener('visibilitychange', () => {
 
 view.resize();
 requestAnimationFrame(frame);
+// Read-only handle for automated browser checks.
+Object.defineProperty(window, '__ricochet', { value: { get game() { return game; } } });
 toMenu().catch((e) => {
   console.error(e);
   $('loadingText').textContent = 'Не удалось загрузить игру. Обновите страницу.';
