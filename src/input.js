@@ -1,8 +1,7 @@
-// Fixed on-screen joystick plus quick taps anywhere else to fire. Multitouch: one finger can
-// steer while another taps.
+// Fixed on-screen joystick; any other touch aims (hold to see the trajectory) and fires on release.
+// Multitouch: one finger can steer while another aims.
 
-const TAP_MS = 220;
-const TAP_PX = 14;
+const AIM_MS = 120; // a touch held this long shows the aim line
 const STICK_PX = 60;   // knob travel radius
 const ZONE = 1.7;      // touches within ZONE × STICK_PX of the center grab the stick
 
@@ -21,19 +20,19 @@ export function createInput(el, getStickCenter) {
       stick = { id: e.pointerId, x0: c.x, y0: c.y, x: e.clientX, y: e.clientY };
       return;
     }
-    touches.set(e.pointerId, { x0: e.clientX, y0: e.clientY, t0: performance.now(), moved: false });
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY, t0: performance.now() });
   };
   const move = (e) => {
     if (stick && stick.id === e.pointerId) { stick.x = e.clientX; stick.y = e.clientY; return; }
     const t = touches.get(e.pointerId);
-    if (t && Math.hypot(e.clientX - t.x0, e.clientY - t.y0) > TAP_PX) t.moved = true;
+    if (t) { t.x = e.clientX; t.y = e.clientY; }
   };
   const up = (e) => {
     if (stick && stick.id === e.pointerId) { stick = null; return; }
     const t = touches.get(e.pointerId);
     if (!t) return;
     touches.delete(e.pointerId);
-    if (!t.moved && performance.now() - t.t0 < TAP_MS) fires.push({ x: e.clientX, y: e.clientY });
+    fires.push({ x: e.clientX, y: e.clientY });
   };
 
   el.addEventListener('pointerdown', down);
@@ -52,6 +51,12 @@ export function createInput(el, getStickCenter) {
       return { x: dx, z: dz };
     },
     takeFire: () => fires.shift() || null,
+    // The newest finger that has been held long enough to aim, or null.
+    aim() {
+      let best = null;
+      for (const t of touches.values()) if (performance.now() - t.t0 >= AIM_MS && (!best || t.t0 > best.t0)) best = t;
+      return best && { x: best.x, y: best.y };
+    },
     stick: () => stick,
   };
 }

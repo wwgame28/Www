@@ -23,14 +23,15 @@ const norm = (x, z) => {
 // Reflect a moving point off the arena walls and circular solids. Returns true if it bounced.
 export function bounce(p, world) {
   const { W, D } = world.arena;
+  const PR = p.r || PROJECTILE_R;
   let hit = false;
-  if (p.x < -W + PROJECTILE_R) { p.x = -W + PROJECTILE_R; p.vx = Math.abs(p.vx); hit = true; }
-  if (p.x > W - PROJECTILE_R) { p.x = W - PROJECTILE_R; p.vx = -Math.abs(p.vx); hit = true; }
-  if (p.z < -D + PROJECTILE_R) { p.z = -D + PROJECTILE_R; p.vz = Math.abs(p.vz); hit = true; }
-  if (p.z > D - PROJECTILE_R) { p.z = D - PROJECTILE_R; p.vz = -Math.abs(p.vz); hit = true; }
+  if (p.x < -W + PR) { p.x = -W + PR; p.vx = Math.abs(p.vx); hit = true; }
+  if (p.x > W - PR) { p.x = W - PR; p.vx = -Math.abs(p.vx); hit = true; }
+  if (p.z < -D + PR) { p.z = -D + PR; p.vz = Math.abs(p.vz); hit = true; }
+  if (p.z > D - PR) { p.z = D - PR; p.vz = -Math.abs(p.vz); hit = true; }
   for (const o of world.solids) {
     const dx = p.x - o.x, dz = p.z - o.z;
-    const dist = Math.hypot(dx, dz), min = o.r + PROJECTILE_R;
+    const dist = Math.hypot(dx, dz), min = o.r + PR;
     if (dist < min && dist > 1e-6) {
       const nx = dx / dist, nz = dz / dist;
       const dot = p.vx * nx + p.vz * nz;
@@ -44,19 +45,24 @@ export function bounce(p, world) {
 
 const clampToArena = (p, world) => {
   const { W, D } = world.arena;
-  p.x = Math.max(-W + PROJECTILE_R, Math.min(W - PROJECTILE_R, p.x));
-  p.z = Math.max(-D + PROJECTILE_R, Math.min(D - PROJECTILE_R, p.z));
+  const PR = p.r || PROJECTILE_R;
+  p.x = Math.max(-W + PR, Math.min(W - PR, p.x));
+  p.z = Math.max(-D + PR, Math.min(D - PR, p.z));
 };
 
-export function launch(weaponId, hero, target) {
+// mods: perk levels (see perks.js) — extra bounces, projectile size and speed.
+export function launch(weaponId, hero, target, mods = {}) {
   const [dx, dz] = norm(target.x - hero.x, target.z - hero.z);
   const p = {
     weapon: weaponId, state: 'flying', t: 0,
     x: hero.x + dx * 0.5, z: hero.z + dz * 0.5, vx: 0, vz: 0,
     bounces: 0, hits: new Set(), kills: 0, events: [],
     ox: hero.x, oz: hero.z, tx: target.x, tz: target.z,
+    r: PROJECTILE_R * (1 + 0.35 * (mods.size || 0)),
+    extraBounces: mods.bounce || 0,
+    pace: 1 + 0.2 * (mods.shotSpeed || 0),
   };
-  const speed = { ricochet: 18, boomerang: 13, snake: 14, spiral: 15, lightning: 20, orbit: 0, blackhole: 0 }[weaponId];
+  const speed = p.pace * { ricochet: 18, boomerang: 13, snake: 14, spiral: 15, lightning: 20, orbit: 0, blackhole: 0 }[weaponId];
   p.vx = dx * speed; p.vz = dz * speed;
   if (weaponId === 'boomerang') {
     // Aim the start of the arc to the left so the curve sweeps through the target.
@@ -72,7 +78,7 @@ export function launch(weaponId, hero, target) {
     p.sx = p.x; p.sz = p.z;
     p.cx = (p.x + target.x) / 2 - dz * dist * 0.35; // control point bulges sideways
     p.cz = (p.z + target.z) / 2 + dx * dist * 0.35;
-    p.duration = Math.max(0.35, dist / 12);
+    p.duration = Math.max(0.35, dist / (12 * p.pace));
     p.phase = 'travel';
   }
   return p;
@@ -90,9 +96,9 @@ const STEPS = {
     if (bounce(p, world)) {
       p.bounces++;
       p.events.push('bounce');
-      if (p.bounces > 3) drop(p);
+      if (p.bounces > 3 + p.extraBounces) drop(p);
     }
-    if (p.t > 3) drop(p);
+    if (p.t > 3 + p.extraBounces * 0.8) drop(p);
   },
 
   boomerang(p, dt, world) {
@@ -128,7 +134,7 @@ const STEPS = {
     const sway = 1.2 * Math.sin(p.t * 11);
     p.x = p.bx - dz * sway; p.z = p.bz + dx * sway;
     clampToArena(p, world);
-    if (p.bounces > 2 || p.t > 3.2) drop(p);
+    if (p.bounces > 2 + p.extraBounces || p.t > 3.2 + p.extraBounces * 0.8) drop(p);
   },
 
   spiral(p, dt, world) {
@@ -154,9 +160,9 @@ const STEPS = {
     if (bounce(p, world)) {
       p.bounces++;
       p.events.push('bounce');
-      if (p.bounces > 1) drop(p);
+      if (p.bounces > 1 + p.extraBounces) drop(p);
     }
-    if (p.t > 2.5) drop(p);
+    if (p.t > 2.5 + p.extraBounces * 0.6) drop(p);
   },
 
   orbit(p, dt, world) {
@@ -176,13 +182,13 @@ const STEPS = {
       p.vx = (nx - p.x) / dt; p.vz = (nz - p.z) / dt;
       p.x = nx; p.z = nz;
       clampToArena(p, world);
-      if (u >= 1) { p.phase = 'pull'; p.pullT = 0; p.pull = { x: p.x, z: p.z, r: 4, strength: 6 }; p.vx = p.vz = 0; }
+      if (u >= 1) { p.phase = 'pull'; p.pullT = 0; p.pull = { x: p.x, z: p.z, r: 4 * (p.r / PROJECTILE_R), strength: 6 }; p.vx = p.vz = 0; }
       return;
     }
     p.pullT += dt;
     if (p.pullT >= 1.2) {
       p.events.push('explode');
-      p.explosion = { x: p.x, z: p.z, r: 3 };
+      p.explosion = { x: p.x, z: p.z, r: 3 * (p.r / PROJECTILE_R) };
       drop(p);
     }
   },
@@ -201,7 +207,7 @@ export function onEnemyHit(p, enemy, world) {
   }
   if (!best) { drop(p); return; }
   const [dx, dz] = norm(best.x - p.x, best.z - p.z);
-  p.vx = dx * 20; p.vz = dz * 20;
+  p.vx = dx * 20 * p.pace; p.vz = dz * 20 * p.pace;
   p.events.push('chain');
 }
 
@@ -216,4 +222,19 @@ export function stepProjectile(p, dt, world) {
     p.x += p.vx * dt; p.z += p.vz * dt;
     bounce(p, world);
   }
+}
+
+// Where a shot would go right now: the real trajectory, ignoring enemies (so lightning shows its
+// first leg). Used for the aim line while the finger is held down.
+export function previewPath(weaponId, hero, target, world, mods = {}, maxT = 2.6) {
+  const p = launch(weaponId, hero, target, mods);
+  const w = { ...world, enemies: [], hero: { ...hero } };
+  const pts = [{ x: p.x, z: p.z }];
+  const dt = 1 / 60;
+  for (let i = 0; i < maxT / dt && p.state === 'flying'; i++) {
+    stepProjectile(p, dt, w);
+    if (i % 2 === 1) pts.push({ x: p.x, z: p.z });
+  }
+  pts.push({ x: p.x, z: p.z });
+  return pts;
 }

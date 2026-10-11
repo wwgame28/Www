@@ -109,6 +109,19 @@
   .pop { position: absolute; transform: translate(-50%, -50%); font-weight: 900; font-size: 22px; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.45); pointer-events: none; animation: rise .8s ease-out forwards; white-space: nowrap; }
   .pop.combo { color: var(--gold); font-size: 28px; }
 
+  #perkRow { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; max-width: 220px; }
+  #perkRow span { background: rgba(20,24,43,.6); border-radius: 10px; padding: 3px 7px; font-size: 13px; font-weight: 800; }
+  #perks { justify-content: center; gap: 14px; }
+  #perks h2 { text-align: center; font-size: 28px; font-weight: 900; color: var(--gold); text-shadow: 0 3px 0 var(--gold-dark); }
+  #perks .note { text-align: center; }
+  .perk { display: grid; grid-template-columns: 56px 1fr auto; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 14px; border-radius: var(--radius); background: var(--panel); border: 2px solid rgba(255,211,77,.35); color: #fff; font: inherit; box-shadow: inset 0 -4px 0 rgba(0,0,0,.3); opacity: 0; animation: deal .35s cubic-bezier(.2,.8,.2,1) forwards; }
+  .perk:nth-child(2) { animation-delay: .08s; } .perk:nth-child(3) { animation-delay: .16s; }
+  .perk:active { transform: scale(.97); border-color: var(--gold); }
+  .perk .ico { width: 56px; height: 56px; border-radius: 14px; background: rgba(255,211,77,.15); display: grid; place-items: center; font-size: 28px; }
+  .perk h3 { font-size: 18px; font-weight: 900; }
+  .perk p { color: var(--muted); font-size: 13px; font-weight: 700; margin-top: 2px; }
+  .perk .lvl { font-weight: 900; color: var(--gold); font-size: 14px; }
+  @keyframes deal { from { opacity: 0; transform: translateY(24px) scale(.95); } to { opacity: 1; transform: none; } }
   #over .card { margin: auto 0; text-align: center; animation: pop .45s cubic-bezier(.2,.8,.2,1); }
   #over .big-score { font-size: 72px; font-weight: 900; color: var(--gold); line-height: 1; margin: 6px 0; text-shadow: 0 4px 0 var(--gold-dark); }
   #over .record { display: none; margin: 4px auto 8px; background: var(--coral); color: #fff; }
@@ -203,7 +216,7 @@
 
 <section id="hud" class="screen">
   <div class="top">
-    <div><div class="tally"><div id="score" class="score">0</div><div id="wave" class="wave">Волна 1</div></div><span id="mult" class="chip mult">×2 следующий выстрел</span></div>
+    <div><div class="tally"><div id="score" class="score">0</div><div id="wave" class="wave">Волна 1</div></div><span id="mult" class="chip mult">×2 следующий выстрел</span><div id="perkRow"></div></div>
     <span class="spacer"></span>
     <button id="pauseBtn" class="btn icon ghost" aria-label="Пауза">❚❚</button>
   </div>
@@ -211,9 +224,15 @@
   <div id="aim"></div>
   <div id="arrow"></div>
   <div id="banner"></div>
-  <div id="hint">Джойстик — бежать. Тап по экрану — выстрел.</div>
+  <div id="hint">Джойстик — бежать. Зажми палец — прицел, отпусти — выстрел.</div>
   <span id="ammo" class="chip">● В руке</span>
   <div id="pops"></div>
+</section>
+
+<section id="perks" class="screen dim">
+  <h2>Волна пройдена!</h2>
+  <p class="note">Выбери улучшение до конца забега</p>
+  <div id="perkList" class="stack"></div>
 </section>
 
 <section id="pause" class="screen dim">

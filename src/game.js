@@ -1,6 +1,7 @@
 import { ARENA, getLocation, layoutFor } from './locations.js';
 import { getWeapon, launch, stepProjectile, onEnemyHit, PROJECTILE_R } from './weapons.js';
 import { ENEMY_TYPES, planWave, speedFactor } from './waves.js';
+import { blankMods, offerPerks, applyPerk } from './perks.js';
 
 const HERO_SPEED = 5.2;
 const HERO_R = 0.4;
@@ -16,6 +17,7 @@ export function createGame({ seed, locationId, weaponId }) {
     enemies: [], nextId: 1,
     wave: 0, waveT: 0, queue: [], breakT: 0.6,
     score: 0, bestCombo: 0, shotMult: 1, pendingMult: 1,
+    mods: blankMods(), choosing: null, // perk ids offered after a cleared wave; the game waits for a pick
     time: 0, over: false, events: [],
   };
   return g;
@@ -87,13 +89,13 @@ function damage(g, e, p) {
 
 // input: { move: {x, z} with length 0..1, fire: {x, z} | null }
 export function step(g, dt, input = {}) {
-  if (g.over) return;
+  if (g.over || g.choosing) return;
   g.time += dt;
   const rule = g.loc.rule;
   const h = g.hero, p = g.projectile;
 
   // Hero movement (ice uses low friction so the hero slides).
-  const slow = inRiver(g, h.z) ? rule.river.slow : 1;
+  const slow = (inRiver(g, h.z) ? rule.river.slow : 1) * (1 + 0.12 * g.mods.speed);
   const mx = input.move?.x || 0, mz = input.move?.z || 0;
   const k = Math.min(1, (rule.friction || 14) * dt);
   h.vx += (mx * HERO_SPEED * slow - h.vx) * k;
@@ -107,7 +109,7 @@ export function step(g, dt, input = {}) {
 
   // Fire.
   if (input.fire && p.state === 'held') {
-    g.projectile = launch(g.weapon.id, h, input.fire);
+    g.projectile = launch(g.weapon.id, h, input.fire, g.mods);
     g.shotMult = g.pendingMult;
     g.pendingMult = 1;
     h.facing = Math.atan2(input.fire.x - h.x, input.fire.z - h.z);
@@ -125,7 +127,7 @@ export function step(g, dt, input = {}) {
   if (proj.state === 'flying') {
     for (const e of g.enemies) {
       if (e.dead || proj.hits.has(e.id)) continue;
-      if (Math.hypot(e.x - proj.x, e.z - proj.z) < e.r + PROJECTILE_R) {
+      if (Math.hypot(e.x - proj.x, e.z - proj.z) < e.r + (proj.r || PROJECTILE_R)) {
         damage(g, e, proj);
         onEnemyHit(proj, e, world);
       }
@@ -139,13 +141,19 @@ export function step(g, dt, input = {}) {
     }
   }
 
-  // Catch in flight (×2 next shot) or pick up from the floor.
+  // Magnet perk: a dropped projectile crawls toward the hero.
   const dHero = Math.hypot(proj.x - h.x, proj.z - h.z);
-  if (proj.state === 'flying' && g.weapon.catchable && proj.t > 0.25 && dHero < 0.75) {
+  if (proj.state === 'dropped' && g.mods.magnet && dHero < 2 + 2 * g.mods.magnet) {
+    const pull = (2 + 1.5 * g.mods.magnet) * dt / Math.max(dHero, 0.01);
+    proj.x += (h.x - proj.x) * pull; proj.z += (h.z - proj.z) * pull;
+  }
+  // Catch in flight (×2 next shot) or pick up from the floor.
+  const reach = 1 + 0.5 * g.mods.reach;
+  if (proj.state === 'flying' && g.weapon.catchable && proj.t > 0.25 && dHero < 0.75 * reach) {
     proj.state = 'held';
     g.pendingMult = 2;
     emit(g, 'catch', { x: h.x, z: h.z });
-  } else if (proj.state === 'dropped' && dHero < 0.85) {
+  } else if (proj.state === 'dropped' && dHero < 0.85 * reach) {
     proj.state = 'held';
     emit(g, 'pickup', { x: h.x, z: h.z });
   }
@@ -156,6 +164,8 @@ export function step(g, dt, input = {}) {
       g.score += 50 * g.wave;
       emit(g, 'waveClear', { wave: g.wave, bonus: 50 * g.wave });
       g.breakT = WAVE_BREAK;
+      const offer = offerPerks(g.seed, g.wave, g.mods, g.weapon.id);
+      if (offer.length) { g.choosing = offer; emit(g, 'perkChoice', { options: offer }); return; }
     }
     g.breakT = Math.max(0, g.breakT - dt);
     if (g.breakT === 0) { startWave(g); g.breakT = 0; }
@@ -186,6 +196,12 @@ export function step(g, dt, input = {}) {
     }
     if (!e.flying) pushOutOfSolids(g, e);
     if (d < e.r + h.r - 0.08) {
+      if (g.mods.shield > 0) { // the shield takes the hit and destroys the attacker
+        g.mods.shield--;
+        e.dead = true;
+        emit(g, 'shield', { x: e.x, z: e.z, id: e.id, left: g.mods.shield });
+        continue;
+      }
       g.over = true;
       emit(g, 'death', { x: h.x, z: h.z });
       return;
@@ -205,6 +221,14 @@ export function step(g, dt, input = {}) {
     }
   }
   if (g.enemies.length > 80) g.enemies = alive;
+}
+
+export function choosePerk(g, id) {
+  if (!g.choosing?.includes(id)) return false;
+  applyPerk(g.mods, id);
+  g.choosing = null;
+  emit(g, 'perk', { id, level: g.mods[id] });
+  return true;
 }
 
 export function result(g) {

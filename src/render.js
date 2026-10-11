@@ -8,6 +8,7 @@ const WEAPON_COLORS = {
   lightning: 0x9fb4ff, orbit: 0xffa03a, blackhole: 0xb06bff,
 };
 const TRAIL_LEN = 24;
+const AIM_MAX = 200;
 
 export function createRenderer(canvas, { quality = 'high' } = {}) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality === 'high', powerPreference: 'high-performance' });
@@ -175,8 +176,15 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
       trail.frustumCulled = false;
       const hole = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), new THREE.MeshBasicMaterial({ color: 0x1a0830, transparent: true, opacity: 0.7 }));
       hole.visible = false;
-      level.add(group, trail, hole);
-      proj = { group, glow, ring, trail, hole, color, filled: 0 };
+      // Aim line: dashed preview of the real trajectory while a finger is held.
+      const aimGeo = new THREE.BufferGeometry();
+      aimGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(AIM_MAX * 3), 3));
+      const aim = new THREE.Line(aimGeo, new THREE.LineDashedMaterial({ color, dashSize: 0.35, gapSize: 0.2, transparent: true, opacity: 0.9 }));
+      aim.frustumCulled = false; aim.visible = false;
+      const aimEnd = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.38, 20), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
+      aimEnd.rotation.x = -Math.PI / 2; aimEnd.visible = false;
+      level.add(group, trail, hole, aim, aimEnd);
+      proj = { group, glow, ring, trail, hole, aim, aimEnd, color, filled: 0 };
     })());
 
     await Promise.all(jobs);
@@ -213,6 +221,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     else if (ev.type === 'explode') burst(ev.x, ev.z, 0xb06bff, 30, 8);
     else if (ev.type === 'death') burst(ev.x, ev.z, 0xff4d4d, 24, 6);
     else if (ev.type === 'catch') burst(ev.x, ev.z, 0xffffff, 12, 3);
+    else if (ev.type === 'shield') burst(ev.x, ev.z, 0x5fd0ff, 20, 5);
   }
 
   // ---------- per frame ----------
@@ -350,17 +359,32 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     return { x: r.left + ((tmp.x + 1) / 2) * r.width, y: r.top + ((1 - tmp.y) / 2) * r.height, inside: Math.abs(tmp.x) <= 1 && Math.abs(tmp.y) <= 1 };
   }
 
+  function setAim(points) {
+    if (!proj) return;
+    const on = !!points && points.length > 1;
+    proj.aim.visible = proj.aimEnd.visible = on;
+    if (!on) return;
+    const n = Math.min(points.length, AIM_MAX);
+    const arr = proj.aim.geometry.attributes.position.array;
+    for (let i = 0; i < n; i++) { arr[i * 3] = points[i].x; arr[i * 3 + 1] = 0.35; arr[i * 3 + 2] = points[i].z; }
+    proj.aim.geometry.setDrawRange(0, n);
+    proj.aim.geometry.attributes.position.needsUpdate = true;
+    proj.aim.computeLineDistances();
+    const last = points[n - 1];
+    proj.aimEnd.position.set(last.x, 0.04, last.z);
+  }
+
   // Drop everything left over from the previous run (enemy ids restart at 1 in a new game).
   function clearRun() {
     for (const v of enemyViews.values()) level?.remove(v.obj);
     for (const d of dying) level?.remove(d.view.obj);
     for (const q of particles) { scene.remove(q.m); q.m.material.dispose(); }
     enemyViews.clear(); dying.length = 0; particles.length = 0; pending.clear();
-    if (proj) proj.filled = 0;
+    if (proj) { proj.filled = 0; setAim(null); }
     if (hero) { hero.current = null; animate(hero, 'holding-right', 0); }
   }
 
   function setMenu(on) { menu = on; placeCamera(); if (hero) hero.obj.visible = !on; if (proj) proj.group.visible = false; }
 
-  return { setLocation, sync, render, resize, effect, screenToGround, worldToScreen, setMenu, clearRun, renderer };
+  return { setLocation, sync, render, resize, effect, screenToGround, worldToScreen, setMenu, clearRun, setAim, renderer };
 }
