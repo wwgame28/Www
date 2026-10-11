@@ -13,7 +13,12 @@ const STEP = 1 / 60;
 const data = progress.load();
 const audio = createAudio();
 const canvas = $('game');
-const input = createInput(canvas);
+const stickCenter = () => {
+  const r = $('stick').getBoundingClientRect();
+  return r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+};
+const input = createInput(canvas, stickCenter);
+document.body.classList.toggle('stick-right', !!data.settings.stickRight);
 const view = createRenderer(canvas, { quality: data.settings.quality });
 audio.setMuted(!data.settings.sound);
 
@@ -182,13 +187,16 @@ function updateHud() {
     arrow.style.top = `${cy + Math.sin(a) * k - 11}px`;
     arrow.style.transform = `rotate(${a + Math.PI / 2}rad)`;
   } else arrow.style.display = 'none';
+  // Fixed joystick: only the knob moves, clamped to the ring.
   const st = input.stick(), el = $('stick');
+  let kx = 0, ky = 0;
   if (st) {
-    el.style.display = 'block';
-    el.style.left = `${st.x0}px`; el.style.top = `${st.y0}px`;
-    const dx = Math.max(-60, Math.min(60, st.x - st.x0)), dy = Math.max(-60, Math.min(60, st.y - st.y0));
-    el.firstElementChild.style.transform = `translate(${dx}px, ${dy}px)`;
-  } else el.style.display = 'none';
+    kx = st.x - st.x0; ky = st.y - st.y0;
+    const l = Math.hypot(kx, ky);
+    if (l > 60) { kx *= 60 / l; ky *= 60 / l; }
+  }
+  el.classList.toggle('active', !!st);
+  el.firstElementChild.style.transform = `translate(${kx}px, ${ky}px)`;
 }
 
 // ---------- loop ----------
@@ -250,6 +258,7 @@ const toggle = (id, on, onChange) => {
   el.addEventListener('click', () => { const v = !el.classList.contains('on'); el.classList.toggle('on', v); onChange(v); progress.save(data); });
 };
 toggle('soundToggle', data.settings.sound, (v) => { data.settings.sound = v; audio.setMuted(!v); });
+toggle('stickToggle', !!data.settings.stickRight, (v) => { data.settings.stickRight = v; document.body.classList.toggle('stick-right', v); });
 toggle('qualityToggle', data.settings.quality === 'high', (v) => { data.settings.quality = v ? 'high' : 'low'; toast('Применится после перезапуска'); });
 
 addEventListener('resize', () => view.resize());
@@ -260,6 +269,8 @@ document.addEventListener('visibilitychange', () => {
 
 view.resize();
 requestAnimationFrame(frame);
+// Read-only handle for automated browser checks.
+Object.defineProperty(window, '__ricochet', { value: { get game() { return game; } } });
 toMenu().catch((e) => {
   console.error(e);
   $('loadingText').textContent = 'Не удалось загрузить игру. Обновите страницу.';
