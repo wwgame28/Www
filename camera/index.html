@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Кадр">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-180.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Кадр — камера с ИИ</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="stage">
+  <video id="video" playsinline muted autoplay></video>
+
+  <svg class="grid" id="grid" viewBox="0 0 3 3" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M1 0V3M2 0V3M0 1H3M0 2H3" />
+  </svg>
+  <div class="target" id="target" aria-hidden="true"></div>
+  <div class="subject" id="subject" aria-hidden="true"></div>
+
+  <header class="top">
+    <div class="score" id="score" role="status" aria-live="off" aria-label="Оценка кадра">
+      <svg viewBox="0 0 44 44"><circle class="track" cx="22" cy="22" r="19"/><circle class="arc" id="arc" cx="22" cy="22" r="19"/></svg>
+      <span id="scoreNum">--</span>
+    </div>
+    <p class="hint" id="hint" role="status" aria-live="polite">Наведите камеру</p>
+  </header>
+
+  <footer class="bar">
+    <button class="btn side" id="settingsBtn" aria-label="Настройки">
+      <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+    </button>
+    <button class="shutter" id="shutter" aria-label="Сделать снимок"><span></span></button>
+    <button class="btn side ai" id="aiBtn" aria-label="ИИ-оценка кадра">
+      <svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></svg>
+      <span>ИИ</span>
+    </button>
+  </footer>
+
+  <section class="start" id="start">
+    <h1>Кадр</h1>
+    <p>Камера подскажет, где красиво: свет, резкость, положение объекта по правилу третей.</p>
+    <button class="primary" id="startBtn">Включить камеру</button>
+    <p class="err" id="startErr" hidden></p>
+  </section>
+
+  <div class="flash" id="flash"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <section class="sheet" id="sheet" hidden aria-labelledby="sheetTitle">
+    <button class="close" id="sheetClose" aria-label="Закрыть">×</button>
+    <div class="sheet-score"><b id="aiScore">--</b><span>/100</span></div>
+    <h2 id="sheetTitle">Оцениваю кадр…</h2>
+    <ul id="aiTips"></ul>
+  </section>
+
+  <section class="sheet settings" id="settings" hidden aria-labelledby="setTitle">
+    <button class="close" id="setClose" aria-label="Закрыть">×</button>
+    <h2 id="setTitle">Настройки ИИ</h2>
+    <label>Ключ OpenRouter
+      <input id="keyInput" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="sk-or-…">
+    </label>
+    <label>Модель с поддержкой изображений
+      <input id="modelInput" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+    </label>
+    <p class="note">Ключ хранится только на этом телефоне и отправляется только на openrouter.ai. Живые подсказки работают без ключа и бесплатно; каждая «ИИ-оценка» — один платный запрос с картинкой.</p>
+    <div class="row"><button class="primary" id="saveSet">Сохранить</button><button class="ghost" id="clearKey">Удалить ключ</button></div>
+  </section>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>
