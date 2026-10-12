@@ -20,7 +20,8 @@ const wallPieces = (half) => {
 
 export const zone = {
   id: 'caves', name: 'Пещеры Обсидианы', kit: 'hex', size: { W: 26, D: 26 }, sky: 'night',
-  look: { fog: 0x0c0916, near: 3, far: 19, hemi: [0x7a6aa8, 0x160e22, 0.45], sun: [0x9a8ac8, 0.35], bg: 0x0c0916 },
+  look: { fog: 0x0c0916, near: 5, far: 23, hemi: [0x7a6aa8, 0x160e22, 0.6], sun: [0x9a8ac8, 0.4], bg: 0x0c0916 },
+  lookDone: { fog: 0x1a1430, near: 12, far: 42, hemi: [0x9a8ac8, 0x2a1e40, 0.95], sun: [0xb8a8e8, 0.8], bg: 0x1a1430 },
   dark: true,
   weather: 'dust',
   ground: 0x2e2840, road: 0x433a58, roads,

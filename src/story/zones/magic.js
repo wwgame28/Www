@@ -10,7 +10,7 @@ const portals = [{ kind: 'portal', a: [-19, 14], b: [15, -15], r: 1 }, { kind: '
 const well = { kind: 'pull', x: 0, z: 2, r: 4.5, strength: 2.6 };
 const keep = clearOf(roads, [
   [20, 24, 4], [11, 22, 3.5], [14, 20, 2.5], [6, 18, 2.5], [-8, 14, 2.5], [18, 16, 4], [0, -14, 6], [0, -6, 5], [well.x, well.z, well.r + 1],
-  ...rifts.map(([x, z]) => [x, z, 2.5]), ...stars.map(([x, z]) => [x, z, 2.2]), ...portals.flatMap((p) => [[...p.a, 2.6], [...p.b, 2.6]]),
+  ...rifts.map(([x, z]) => [x, z, 2.5]), ...stars.map(([x, z]) => [x, z, 2.2]), ...portals.flatMap((p) => [[...p.a, 4], [...p.b, 4]]),
 ]);
 const trees = [['@nature/tree_default_fall', { h: 6 }, 'trunk', { tint: 0xff9ad5 }], ['@nature/tree_oak_fall', { h: 6.5 }, 'trunk', { tint: 0xffc8f0 }],
   ['@nature/tree_detailed_fall', { h: 6 }, 'trunk'], ['@nature/tree_blocks_fall', { h: 5.5 }, 'trunk', { tint: 0xd9b0ff }],
@@ -36,12 +36,13 @@ export const zone = {
     ['@nature/campfire_stones', 11, 22, 0, 1.6, 'round'],
     ['building_tower_A_blue', 18.5, 16, 0, 4.4, 'round', { tint: 0xd8b8ff }], ['building_tower_B_blue', -18, -23, 0, 4.6, 'round', { tint: 0xd8b8ff }],
     ['building_church_green', 21, -5, -90, 6, 'box', { tint: 0xe0c8ff }],
-    ...portals.flatMap((p) => [['@nature/statue_ring', p.a[0], p.a[1] - 1.1, 0, { h: 2.6 }, 'cap'], ['@nature/statue_ring', p.b[0], p.b[1] - 1.1, 0, { h: 2.6 }, 'cap']]),
     ...obelisks,
     ['@halloween/shrine_candles', -8, 17.5, 180, 1.6, 'box'], ['@dungeon/candle_triple', 4, 16.5, 0, 0.6, 'round'],
     ...scatter('magic:trees', trees, 40, [-27, -27, 27, 27], keep, 4),
   ],
   scenery: [
+    // the stone rings: step into one and come out of its twin (the swirl in the ring is drawn by scene.js)
+    ...portals.flatMap((p) => [['@nature/statue_ring', ...p.a, 0, { h: 2.6 }], ['@nature/statue_ring', ...p.b, 0, { h: 2.6 }]]),
     ...belt('magic:belt', [['@nature/tree_fat_fall', 7], ['@nature/tree_default_fall', 6], ['mountain_C', 20], ['hills_C', 14]], 28, { gap: 6, skip: [[20, 31, 7]] }),
     ...scatter('magic:flowers', [['@nature/flower_purpleA', 0.6], ['@nature/flower_purpleB', 0.6], ['@nature/plant_flatTall', 0.8]], 36, [-26, -26, 26, 26], clearOf(roads, [], 1.4), 1.6)
       .map(([m, x, z, r, s]) => [m, x, z, r, s]),

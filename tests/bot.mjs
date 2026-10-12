@@ -20,6 +20,7 @@ export function makeNav(g) {
       if (g.solids.some((o) => solidContact(o, x, z, 0.5))) blocked[j * nx + i] = 1;
       else if (g.villagers.some((v) => Math.hypot(v.x - x, v.z - z) < 0.85)) blocked[j * nx + i] = 1;
       else if (g.areas.some((a) => a.kind === 'quicksand' && inArea({ ...a, r: a.r + 0.3 }, x, z))) blocked[j * nx + i] = 2; // avoid, not wall
+      else if (g.areas.some((a) => a.kind === 'portal' && [a.a, a.b].some(([px, pz]) => Math.hypot(x - px, z - pz) < (a.r || 0.9) + 0.6))) blocked[j * nx + i] = 1; // walks around the rings
     }
   }
   const ci = (x) => Math.max(0, Math.min(nx - 1, Math.floor((x + W) / CELL))), cj = (z) => Math.max(0, Math.min(nz - 1, Math.floor((z + D) / CELL)));
@@ -139,7 +140,15 @@ export function makeBot(g) {
         if (g.near === step.npc) return { talk: true };
         return { move: walkTo(v.x, v.z, TALK_R - 0.8) };
       }
-      case 'targets': { const t = near(g.targets.filter((x) => !x.hit)); return t ? throwAt(t.x, t.z, 6) : {}; }
+      case 'targets': {
+        const t = near(g.targets.filter((x) => !x.hit));
+        if (!t) return {};
+        if (st.targetsOf !== g.targets) { st.targetsOf = g.targets; st.tries = {}; }
+        const tries = st.tries[t.id] || 0; // after misses (a curving throw hits a tree), step closer
+        const a = throwAt(t.x, t.z, Math.max(2.2, 6 - 1.5 * Math.floor(tries / 2)));
+        if (a.fire) st.tries[t.id] = tries + 1;
+        return a;
+      }
       case 'collect': { const it = near(g.items.filter((x) => !x.taken)); return it ? { move: walkTo(it.x, it.z, 0.2) } : {}; }
       case 'reach': { const at = g.reach || g.gates.find((x) => x.id === step.gate); return at ? { move: walkTo(at.x, at.z, 0.2) } : {}; }
       case 'clear': { const c = near(g.camps.filter((x) => !x.cleared)); return c ? { move: walkTo(c.x, c.z, 3) } : {}; }

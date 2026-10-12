@@ -23,7 +23,7 @@ export const zone = {
   ground: 0xe6cf98, road: 0xc8a46c, roads,
   paint: [...water.map((w) => ({ ...w, kind: 'shallow' })), { kind: 'shallow', x: 21, z: 12, w: 14, d: 2 }],
   sea: { x: 14 }, // open sea east of x = 14 (render)
-  spawn: { x: -24, z: 2, facing: Math.PI / 2 },
+  spawn: { x: -24, z: 2, facing: 2.1 }, // looking at the queen's portrait
   campfire: { x: -6, z: 8 },
   entries: { sea1: [19, -5.5], sea2: [18, 6], sea3: [19, 18], north: [-4, -24] },
   enemyTint: 0x8fd6cf,
@@ -55,7 +55,7 @@ export const zone = {
     ['waterplant_A', 17, -14, 0, 1], ['waterplant_B', 23, 9, 0, 1], ['waterlily_A', 18, 22, 0, 1],
   ],
   signs: [{ x: -24, z: -1.5, rot: 90, text: '← Деревня' }],
-  portraits: [{ x: -17, z: -3.5, rot: -90, image: 'queen-sea', title: 'Царица морей Ундина', big: true }],
+  portraits: [{ x: -17, z: -3, rot: -60, image: 'queen-sea', title: 'Царица морей Ундина', big: true }],
   villagers: [
     { id: 'briz', name: 'Капитан Бриз', model: 'Knight', palette: 'sea', x: -12, z: 3.5, facing: -Math.PI / 2, hold: ['1H_Sword'],
       chatter: ['Море — как Царица: красивое, но с характером.', 'Говорят, Капитан Утопленник когда-то был лучшим моряком гавани.'] },

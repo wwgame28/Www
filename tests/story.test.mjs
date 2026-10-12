@@ -361,3 +361,45 @@ test('the outfit recolor turns cloth to the palette hue and keeps metal; skin ch
   recolorPixels(same, PALETTES[0], SKINS.find((s) => s.id === 'medium'), main);
   assert.deepEqual([...same], [...px]);
 });
+
+test('fainting in a raid replays only the wave in progress', () => {
+  const g = world('village', { ...blankStory(), lines: { awakening: 2 } });
+  assert.equal(stepOf(g).type, 'defend');
+  run(g, 0.1);
+  g.raid.wave = 2; // the second wave is on…
+  g.hearts = 1;
+  const e = foe(g, { rise: 0 }); // …and its last skeleton knocks the hero out
+  e.x = g.hero.x + 0.5; e.z = g.hero.z;
+  const evs = run(g, FAINT_T + 4);
+  assert.ok(evs.some((x) => x.type === 'wake'));
+  assert.equal(evs.filter((x) => x.type === 'raidWave').at(-1)?.wave, 2, 'back to wave 2, not to wave 1');
+});
+
+test('«Говорить» picks whoever has a task over a nearer passer-by', () => {
+  const g = world('village', blankStory());
+  const st = stepOf(g), quest = g.villagers.find((v) => v.id === st.npc), other = g.villagers.find((v) => v.id !== st.npc);
+  g.hero.x = quest.x + 1.8; g.hero.z = quest.z;
+  other.x = g.hero.x + 0.8; other.z = g.hero.z;
+  run(g, 0.1);
+  assert.equal(g.near, quest.id);
+});
+
+test('throws go through the stone rings, except the boomerang that always comes home', () => {
+  for (const [weaponId, through] of [['ricochet', true], ['boomerang', false]]) {
+    const g = world('magic', { ...base, blessings: ['bloom'] }, { weaponId });
+    const ring = g.areas.find((a) => a.kind === 'portal');
+    g.hero.x = ring.a[0] + 4; g.hero.z = ring.a[1];
+    run(g, 0.1, () => ({ fire: { x: ring.a[0], z: ring.a[1] } }));
+    assert.equal(g.projectile.state, 'flying', weaponId);
+    Object.assign(g.projectile, { x: ring.a[0], z: ring.a[1] });
+    stepWorld(g, DT, {});
+    assert.equal(g.events.some((x) => x.type === 'portal'), through, weaponId);
+  }
+});
+
+test('every queen sits on a solid throne', () => {
+  for (const zone of Object.values(ZONES).filter((z) => z.queen)) {
+    const g = world(zone.id), q = zone.queen;
+    assert.ok(g.solids.some((o) => solidContact(o, q.x - Math.sin(q.facing) * 1.1, q.z - Math.cos(q.facing) * 1.1, 0.3)), zone.id);
+  }
+});

@@ -75,7 +75,7 @@ export const zone = {
   ],
   gates: [
     { id: 'toForest', to: 'forest', x: 0, z: -24.5, w: 4, requires: { flags: ['awakened'] }, closed: 'Сначала помоги деревне', arrive: { x: 0, z: 24.5, facing: Math.PI } },
-    { id: 'toBeach', to: 'beach', x: 24.5, z: 2, w: 4, requires: { flags: ['awakened'] }, closed: 'Сначала помоги деревне', arrive: { x: -25.5, z: 2, facing: Math.PI / 2 } },
+    { id: 'toBeach', to: 'beach', x: 24.5, z: 2, w: 4, requires: { flags: ['awakened'] }, closed: 'Сначала помоги деревне', arrive: { x: -25.5, z: 2, facing: 2.1 } }, // facing the Sea Queen's portrait
     { id: 'toDesert', to: 'desert', x: 0, z: 24.5, w: 4, requires: { flags: ['awakened'] }, closed: 'Сначала помоги деревне', arrive: { x: 0, z: -25.5, facing: 0 } },
     { id: 'toMountains', to: 'mountains', x: -24.5, z: 4, w: 4, requires: { flags: ['awakened'] }, closed: 'Сначала помоги деревне', arrive: { x: 25.5, z: 4, facing: -Math.PI / 2 } },
     { id: 'toCaves', to: 'caves', x: 4, z: 3, w: 3.4, requires: { gems: 6, blessings: ['sun'] }, closed: 'Колодец ведёт в пещеры. Нужны шесть камней королев и «Солнечный камень»', arrive: { x: 0, z: 21, facing: Math.PI } },

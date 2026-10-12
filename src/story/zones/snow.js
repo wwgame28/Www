@@ -18,7 +18,7 @@ export const zone = {
   id: 'snow', name: 'Пики Снежаны', kit: 'hex', size: { W: 28, D: 28 }, sky: 'morning',
   look: { fog: 0xd6e2ee, near: 14, far: 50, hemi: [0xf0f6ff, 0x7a8aa0, 1.2], sun: [0xe6f0ff, 1.7] },
   lookDone: { fog: 0xe4eef8, near: 30, far: 85, hemi: [0xf6faff, 0x8a9ab0, 1.35], sun: [0xfff6e8, 2.3] },
-  weather: 'snow', weatherDone: 'flakes',
+  weather: 'snow', weatherDone: 'flakes', bloom: 0.3, // bright snow would wash out
   ground: 0xeef3f8, road: 0xc8d6e4, roads,
   paint: [{ kind: 'ice', ...lake }],
   spawn: { x: 24, z: 20, facing: -Math.PI / 2 },
@@ -92,7 +92,7 @@ export const lines = [{
     ] },
     { type: 'collect', task: 'Собери ледяные кристаллы', item: 'crystal', items: crystals },
     { type: 'defend', task: 'Отбей ледяных скелетов', banner: 'Ледяные скелеты идут на дворец!',
-      waves: [[['grunt', 3, 'north'], ['runner', 2, 'west']], [['tank', 1, 'north'], ['grunt', 3, 'east'], ['runner', 2, 'south']]], hint: 'Касание ледяного скелета замедляет' },
+      waves: [[['grunt', 3, 'north'], ['runner', 2, 'west']], [['tank', 1, 'north'], ['grunt', 2, 'east'], ['runner', 2, 'south']]], hint: 'Касание ледяного скелета замедляет' },
     { type: 'boss', task: 'Победи Хозяина Вьюги', banner: 'Хозяин Вьюги!', at: [0, -4],
       boss: { name: 'Хозяин Вьюги', model: 'Skeleton_Warrior', scale: 2.3, hp: 14, speed: 1.6, moves: ['volley', 'summon', 'charge'], summon: ['grunt', 2], volley: 6, spread: 1.2,
         phases: [{ at: 0.5, moves: ['volley', 'charge', 'volley', 'summon'], speed: 2, text: 'Вьюга усиливается!' }] } },

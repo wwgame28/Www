@@ -53,6 +53,10 @@ export function createWorld({ zoneId = 'village', story, weaponId, heroName = '�
   const has = (b) => s.blessings.includes(b);
   const solids = zoneProps(area, s).map((e) => solidOf(area, e));
   for (const w of area.walls || []) solids.push(...wallSolids(w));
+  if (area.queen) { // her throne, just behind her
+    const q = area.queen;
+    solids.push({ x: q.x - Math.sin(q.facing) * 1.0, z: q.z - Math.cos(q.facing) * 1.0, rot: q.facing, hx: 0.55, hz: 0.25, r: 0.2, h: 2.5 });
+  }
   const { x, z, facing } = arrive || area.spawn;
   const mods = blankMods();
   if (has('wave')) { mods.bounce += 1; mods.shotSpeed += 1; }
@@ -273,7 +277,7 @@ function hitHero(g, src, d, why = 'touch') {
     h.vx = nx * KNOCK; h.vz = nz * KNOCK;
     if (src.id && !src.boss) { src.stunT = STUN_T; src.x -= nx * 0.4; src.z -= nz * 0.4; }
   }
-  if (g.area.frostTouch && why === 'touch') g.slowT = 2;
+  if (g.area.frostTouch && why === 'touch') g.slowT = 1.2;
   emit(g, 'hit', { x: h.x, z: h.z, hearts: g.hearts, by: src?.id ?? null, why });
   if (g.hearts <= 0) {
     g.over = true; g.killer = src?.id ?? null; g.faintT = FAINT_T; g.talk = null;
@@ -291,8 +295,10 @@ function wake(g) {
   g.shots = []; g.rocks = [];
   const st = stepOf(g), kind = st?.type;
   if (kind === 'defend' || kind === 'protect') {
+    const reached = g.raid?.wave || 0; // the waves already beaten stay beaten: the one in progress starts over
     for (const e of g.enemies) if (!e.dead) { e.dead = true; e.vanish = true; e.deadT = 0; }
     beginStep(g);
+    if (g.raid) g.raid.wave = Math.max(0, reached - 1);
   } else if (kind === 'boss') { // the boss keeps its wounds and waits at its place; its helpers vanish
     for (const e of g.enemies) {
       if (e.dead) continue;
@@ -408,7 +414,8 @@ function stepWeapon(g, dt, input, talking) {
       if (p.bx !== undefined) { p.bx += dr.vx * dt; p.bz += dr.vz * dt; } // the snake's base point
       p.x += dr.vx * dt; p.z += dr.vz * dt;
     }
-    if (portalJump(g, p, p.vx, p.vz) && p.bx !== undefined) { p.bx = p.x; p.bz = p.z; }
+    // Shots fly through the stone rings too — except the boomerang, which always comes home.
+    if (p.weapon !== 'boomerang' && portalJump(g, p, p.vx, p.vz) && p.bx !== undefined) { p.bx = p.x; p.bz = p.z; }
   }
   if (p.state === 'flying' && !['recall', 'orbit', 'boomerang', 'blackhole'].includes(p.weapon) && Math.hypot(p.x - p.ox, p.z - p.oz) > MAX_RANGE) drop(p);
   for (const ev of p.events) {
@@ -594,11 +601,11 @@ export function stepWorld(g, dt, input = {}) {
     // Who is in reach for «Говорить» (and turns to the hero).
     g.near = null;
     if (!threat && !talking) {
-      let best = TALK_R;
+      let best = Infinity;
       for (const v of g.villagers) {
         if (v.isQueen && ['hidden', 'frozen', 'asleep'].includes(g.queenState)) continue;
-        const d = Math.hypot(v.x - h.x, v.z - h.z);
-        if (d < best) { best = d; g.near = v.id; }
+        const d = Math.hypot(v.x - h.x, v.z - h.z), score = d - (v.quest ? TALK_R : 0); // whoever has a task comes first
+        if (d < TALK_R && score < best) { best = score; g.near = v.id; }
       }
     }
     for (const v of g.villagers) {
