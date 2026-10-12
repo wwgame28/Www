@@ -21,4 +21,4 @@ The 4-agent design workflow (catalog, economy, UI, tech lead) was stopped by the
   - **Balance outlier:** Маг камней (stone mage) scores 3–6× the other heroes (median 3 800–15 000 vs 700–2 900). The agent was weighing a per-run cap of 1 000 coins before the ×2; the balance review should look at the hero itself.
 
 ## Next
-Rerun only the missing parts: shop UI/UX, then the tech lead (spec + plan), giving them these files; then implement after the owner approves.
+Run `workflow-shop-rest.js` (here): the shop UI/UX agent, then the tech lead (spec + plan) reading these drafts. In a Claude Code session on this repo say «Запусти воркфлоу docs/design-review/2026-10-12-shop/workflow-shop-rest.js». Then implement after the owner approves.
