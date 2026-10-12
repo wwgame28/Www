@@ -1,29 +1,82 @@
-// Particle effects (three.quarks): one-shot bursts from small pools, a glowing trail behind the
-// projectile, and looping flames on torches/candles. Additive soft dots, so they also feed the bloom.
+// Particle effects (three.quarks): one-shot bursts from small pools, the projectile's trail (a preset
+// from cosmetics.js), the «Пламя» skin's embers and looping flames on torches/candles. One 2×2 canvas
+// atlas (soft dot, star, snowflake, smoke) is shared by all particles, so they batch into one additive
+// draw call (+1 normal-blended batch only while a trail uses smoke/snowflakes).
 import * as THREE from 'three';
 import {
   BatchedRenderer, ParticleSystem, RenderMode, ConstantValue, IntervalValue, ConstantColor, Vector4,
-  Vector3 as QVec3, SphereEmitter, ConeEmitter, ColorOverLife, SizeOverLife, PiecewiseBezier, Bezier, Gradient, ApplyForce,
+  Vector3 as QVec3, SphereEmitter, ConeEmitter, ColorOverLife, SizeOverLife, PiecewiseBezier, Bezier, Gradient, ApplyForce, RotationOverLife,
 } from 'three.quarks';
+import { TRAILS } from './cosmetics.js';
 
-function softDot() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+function drawSoftDot(g, ox, oy) {
+  const r = g.createRadialGradient(ox + 32, oy + 32, 0, ox + 32, oy + 32, 32);
   r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.35, 'rgba(255,255,255,.65)'); r.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = r; g.fillRect(0, 0, 64, 64);
+  g.fillStyle = r; g.fillRect(ox, oy, 64, 64);
+}
+function drawStar(g, ox, oy) {
+  const cx = ox + 32, cy = oy + 32;
+  const halo = g.createRadialGradient(cx, cy, 0, cx, cy, 30);
+  halo.addColorStop(0, 'rgba(255,255,255,.55)'); halo.addColorStop(0.4, 'rgba(255,255,255,.18)'); halo.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = halo; g.fillRect(ox, oy, 64, 64);
+  g.save();
+  g.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? 10.5 : 27;
+    g.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+  }
+  g.closePath();
+  g.shadowColor = 'rgba(255,255,255,.9)'; g.shadowBlur = 5;
+  g.fillStyle = '#fff'; g.fill();
+  g.restore();
+}
+function drawSnowflake(g, ox, oy) {
+  const cx = ox + 32, cy = oy + 32;
+  const arms = (w, color) => {
+    g.strokeStyle = color; g.lineWidth = w; g.lineCap = 'round';
+    for (let i = 0; i < 6; i++) {
+      const a = (i * Math.PI) / 3, ca = Math.cos(a), sa = Math.sin(a);
+      const P = (d, side, len) => { // a side branch at distance d, angle ±50°
+        const bx = cx + ca * d, by = cy + sa * d, b = a + side * 0.87;
+        g.moveTo(bx, by); g.lineTo(bx + Math.cos(b) * len, by + Math.sin(b) * len);
+      };
+      g.beginPath();
+      g.moveTo(cx, cy); g.lineTo(cx + ca * 25, cy + sa * 25);
+      P(13, 1, 8); P(13, -1, 8); P(19, 1, 5); P(19, -1, 5);
+      g.stroke();
+    }
+  };
+  arms(7, 'rgba(40,110,200,.85)'); // blue outline: still readable on white snow
+  arms(3.2, '#ffffff');
+}
+function drawSmoke(g, ox, oy) {
+  for (const [x, y, r, a] of [[32, 34, 24, 0.55], [22, 28, 15, 0.5], [42, 26, 14, 0.5], [26, 42, 13, 0.45], [42, 41, 13, 0.45]]) {
+    const s = g.createRadialGradient(ox + x, oy + y, 0, ox + x, oy + y, r);
+    s.addColorStop(0, `rgba(255,255,255,${a})`); s.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = s; g.fillRect(ox, oy, 64, 64);
+  }
+}
+function atlas() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  drawSoftDot(g, 0, 0); drawStar(g, 64, 0); drawSnowflake(g, 0, 64); drawSmoke(g, 64, 64);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
 
 const toV4 = (hex, a = 1) => { const c = new THREE.Color(hex); return new Vector4(c.r, c.g, c.b, a); };
+const toV3 = (hex) => { const c = new THREE.Color(hex); return new QVec3(c.r, c.g, c.b); };
 
 export function createFx(scene, { budget = 1 } = {}) {
   const batch = new BatchedRenderer();
   scene.add(batch);
-  const material = new THREE.MeshBasicMaterial({ map: softDot(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  const map = atlas();
+  const material = new THREE.MeshBasicMaterial({ map, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  const normal = new THREE.MeshBasicMaterial({ map, transparent: true, blending: THREE.NormalBlending, depthWrite: false });
   const n = (x) => Math.max(1, Math.round(x * budget)); // fewer particles on the low graphics setting
+  const TILES = { uTileCount: 2, vTileCount: 2 };
 
   function make({ count = 0, rate = 0, speed, life, size, gravity = 0, radius = 0.15, cone = false, looping = false }) {
     const ps = new ParticleSystem({
@@ -33,7 +86,7 @@ export function createFx(scene, { budget = 1 } = {}) {
       emissionOverTime: new ConstantValue(rate),
       emissionBursts: count ? [{ time: 0, count: new ConstantValue(n(count)), cycle: 1, interval: 0.01, probability: 1 }] : [],
       shape: cone ? new ConeEmitter({ radius, angle: 0.35, thickness: 1, arc: Math.PI * 2 }) : new SphereEmitter({ radius, thickness: 1, arc: Math.PI * 2 }),
-      material, renderMode: RenderMode.BillBoard,
+      material, renderMode: RenderMode.BillBoard, ...TILES, startTileIndex: new ConstantValue(0),
     });
     ps.addBehavior(new ColorOverLife(new Gradient([[new QVec3(1, 1, 1), 0], [new QVec3(1, 1, 1), 1]], [[1, 0], [0, 1]])));
     ps.addBehavior(new SizeOverLife(new PiecewiseBezier([[new Bezier(1, 0.8, 0.45, 0), 0]])));
@@ -64,12 +117,69 @@ export function createFx(scene, { budget = 1 } = {}) {
     ps.restart();
   }
 
-  // Glowing trail that follows the projectile while it flies.
-  const trail = make({ rate: 0, speed: [0, 0.2], life: [0.25, 0.4], size: [0.22, 0.34], looping: true, radius: 0.05 });
+  // ---------- trail: one preset = 1-2 looping systems that follow the projectile ----------
+  function makeTrailSystem(s, tint) {
+    const rate = new ConstantValue(0); // mutated, never re-allocated per frame
+    const ps = new ParticleSystem({
+      duration: 1, looping: true, worldSpace: true, autoDestroy: false,
+      startLife: new IntervalValue(...s.life), startSpeed: new IntervalValue(...s.speed), startSize: new IntervalValue(...s.size),
+      startColor: new ConstantColor(s.tint ? toV4(tint) : new Vector4(1, 1, 1, 1)),
+      startRotation: s.spin ? new IntervalValue(0, Math.PI * 2) : new ConstantValue(0),
+      emissionOverTime: rate,
+      shape: new SphereEmitter({ radius: s.radius ?? 0.05, thickness: 1, arc: Math.PI * 2 }),
+      material: s.blend === 'norm' ? normal : material, renderMode: RenderMode.BillBoard, ...TILES, startTileIndex: new ConstantValue(s.tile),
+    });
+    const col = s.color ? s.color.map(([h, p]) => [toV3(h), p]) : [[new QVec3(1, 1, 1), 0], [new QVec3(1, 1, 1), 1]];
+    ps.addBehavior(new ColorOverLife(new Gradient(col, s.alpha ?? [[1, 0], [0, 1]])));
+    const curve = s.grow ? new Bezier(0.6, 0.95, 1.25, 1.5) : s.flat ? new Bezier(1, 1, 0.9, 0.55) : s.twinkle ? new Bezier(0.4, 1.15, 1, 0.1) : new Bezier(1, 0.8, 0.45, 0);
+    ps.addBehavior(new SizeOverLife(new PiecewiseBezier([[curve, 0]])));
+    if (s.up) ps.addBehavior(new ApplyForce(new QVec3(0, 1, 0), new ConstantValue(s.up)));
+    if (s.gravity) ps.addBehavior(new ApplyForce(new QVec3(0, -1, 0), new ConstantValue(s.gravity)));
+    if (s.spin) ps.addBehavior(new RotationOverLife(new IntervalValue(-s.spin, s.spin)));
+    batch.addSystem(ps);
+    scene.add(ps.emitter);
+    return { ps, rate, max: n(s.rate) };
+  }
+  let trail = [];
+  let trailKey = null;
+  function setTrailStyle(id, tint) {
+    const key = `${id}:${tint}`;
+    if (key === trailKey) return;
+    for (const t of trail) { batch.deleteSystem(t.ps); scene.remove(t.ps.emitter); t.ps.dispose(); }
+    trail = (TRAILS[id] || TRAILS.default).systems.map((s) => makeTrailSystem(s, tint));
+    trailKey = key;
+  }
+  setTrailStyle('default', 0xffffff);
   function setTrail(color, x, y, z, on) {
-    trail.emitter.position.set(x, y, z);
-    trail.emissionOverTime = new ConstantValue(on ? n(70) : 0);
-    if (color !== trail.userColor) { trail.startColor = new ConstantColor(toV4(color)); trail.userColor = color; }
+    for (const t of trail) {
+      t.ps.emitter.position.set(x, y, z);
+      t.rate.value = on ? t.max : 0;
+    }
+  }
+
+  // ---------- hero aura (skin «Пламя»: rising embers) ----------
+  let aura = null;
+  const auraRate = new ConstantValue(0);
+  function setAura(kind) {
+    if (aura) { batch.deleteSystem(aura); scene.remove(aura.emitter); aura.dispose(); aura = null; }
+    if (kind !== 'embers') return;
+    aura = new ParticleSystem({
+      duration: 1, looping: true, worldSpace: true, autoDestroy: false,
+      startLife: new IntervalValue(0.5, 0.9), startSpeed: new IntervalValue(0.1, 0.4), startSize: new IntervalValue(0.06, 0.12),
+      startColor: new ConstantColor(new Vector4(1, 1, 1, 1)), emissionOverTime: auraRate,
+      shape: new SphereEmitter({ radius: 0.35, thickness: 1, arc: Math.PI * 2 }),
+      material, renderMode: RenderMode.BillBoard, ...TILES, startTileIndex: new ConstantValue(0),
+    });
+    aura.addBehavior(new ColorOverLife(new Gradient([[toV3(0xffd27a), 0], [toV3(0xff5a1a), 0.6], [toV3(0x801000), 1]], [[1, 0], [0.8, 0.6], [0, 1]])));
+    aura.addBehavior(new SizeOverLife(new PiecewiseBezier([[new Bezier(1, 0.8, 0.45, 0), 0]])));
+    aura.addBehavior(new ApplyForce(new QVec3(0, 1, 0), new ConstantValue(2.2)));
+    batch.addSystem(aura);
+    scene.add(aura.emitter);
+  }
+  function moveAura(x, y, z, on) {
+    if (!aura) return;
+    aura.emitter.position.set(x, y, z);
+    auraRate.value = on ? n(14) : 0;
   }
 
   // Looping flames for the current location (torches, candles, jack-o'-lanterns).
@@ -84,5 +194,5 @@ export function createFx(scene, { budget = 1 } = {}) {
     });
   }
 
-  return { update: (dt) => batch.update(dt), burst, setTrail, setFlames };
+  return { update: (dt) => batch.update(dt), burst, setTrail, setTrailStyle, setFlames, setAura, moveAura };
 }

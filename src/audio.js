@@ -78,6 +78,7 @@ export function createAudio() {
       tone({ type: 'sine', f0: 3100, f1: 2600, dur: 0.25, vol: 0.12 }); // shing
       noise({ dur: 0.18, vol: 0.15, type: 'highpass', f0: 6000 });
     },
+    recall: () => { noise({ dur: 0.25, vol: 0.5, type: 'bandpass', f0: 2500, f1: 600, q: 1.4 }); tone({ type: 'sine', f0: 900, f1: 450, dur: 0.2, vol: 0.2 }); },
     drop: () => { tone({ type: 'triangle', f0: 220, f1: 90, dur: 0.09, vol: 0.45 }); noise({ dur: 0.06, vol: 0.2, f0: 1200 }); },
     spawn: (ev) => { if (!ev.flying) noise({ dur: 0.3, vol: 0.35, f0: 300 }); }, // rumble from under the ground
     explode: () => { noise({ dur: 0.6, vol: 0.6, f0: 900 }); tone({ type: 'sine', f0: 120, f1: 40, dur: 0.5, vol: 0.6 }); },

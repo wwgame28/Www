@@ -11,3 +11,5 @@ Gotchas: GLTFLoader strips '.' from node names (handslot.r -> handslotr). Workfl
 - Not done from the reports: additive Hit_B flinch, ribbon trail, explosion radius ring, «Тряска экрана» toggle, one-handed mode, perimeter dressing.
 - PR 8 (spec v1.5, locations) is in the same PR #7: src/solid.js, src/footprints.js (regenerate with scratchpad lvl/genfoot.mjs), hand-made layouts and `look` in locations.js, tests/layout.test.mjs.
 - Next: the four remaining design reviews (balance, UI, iPhone perf, lead designer), then their fixes.
+- PR #7 (game feel + locations) is merged. Shop design drafts (stopped early by the owner) are in docs/design-review/2026-10-12-shop/: catalog of 15 cosmetics with a prototype and screenshots, economy bot numbers; the UI and tech-lead parts were not done.
+- v1.6 (spec): shop with 15 cosmetics + coins, trick shots, golden zone, recall ↩ — in the PR after #7. Open: the stone mage scores 3–6× the other heroes (economy bot, docs/design-review/2026-10-12-shop/); the 1 000-coin cap per run limits its effect on the shop.

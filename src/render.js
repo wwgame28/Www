@@ -7,6 +7,7 @@ import { ARENA } from './locations.js';
 import { solidExtent } from './solid.js';
 import { ENEMY_TYPES } from './waves.js';
 import { createFx } from './fx.js';
+import { SKINS, WEAPONS, TRAILS, RAINBOW, lookMaterial, orbMesh, hullFor } from './cosmetics.js';
 
 const TRAIL_LEN = 24;
 const AIM_MAX = 200;
@@ -80,6 +81,9 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   let proj = null;
   let menuSpin = 0;
   let look = null; // current location's light and fog (see locations.js)
+  let gear = { skin: null, weapon: null, trail: null }; // cosmetics worn (shop ids; null = the default look)
+  let orbit = false; // shop trail preview: the weapon circles the hero
+  let orbitA = 0;
 
   // Dark patches where skeletons climb out of the ground (a short warning before they come).
   const decals = Array.from({ length: 6 }, () => {
@@ -89,6 +93,26 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     return m;
   });
   let decalI = 0;
+
+  // The golden zone: kills inside it score ×3; it moves every wave (pops in at its new spot).
+  const zone = new THREE.Group();
+  const zoneRing = new THREE.Mesh(new THREE.RingGeometry(1.86, 2, 48), new THREE.MeshBasicMaterial({ color: 0xffd34d, transparent: true, opacity: 0.9, depthWrite: false }));
+  const zoneFill = new THREE.Mesh(new THREE.CircleGeometry(1.86, 48), new THREE.MeshBasicMaterial({ color: 0xffd34d, transparent: true, opacity: 0.14, depthWrite: false }));
+  for (const m of [zoneRing, zoneFill]) m.rotation.x = -Math.PI / 2;
+  zone.add(zoneRing, zoneFill);
+  zone.position.y = 0.035; zone.visible = false; zone.userData = { x: NaN, z: NaN, pop: 1 };
+  scene.add(zone);
+  function syncZone(g, dt) {
+    const z = g.zone;
+    zone.visible = !!z && !g.over;
+    if (!z) return;
+    const u = zone.userData;
+    if (z.x !== u.x || z.z !== u.z) { u.x = z.x; u.z = z.z; u.pop = 0; zone.position.x = z.x; zone.position.z = z.z; }
+    u.pop = Math.min(1, u.pop + dt / 0.35);
+    const k = u.pop < 1 ? 1 - (1 - u.pop) ** 3 : 1;
+    zone.scale.setScalar((z.r / 2) * (0.4 + 0.6 * k));
+    zoneRing.material.opacity = 0.75 + 0.2 * Math.sin(g.time * 4);
+  }
   function decal(x, z) {
     const m = decals[decalI++ % decals.length];
     m.position.x = x; m.position.z = z; m.userData.t = 1.3; m.visible = true;
@@ -281,9 +305,27 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
         if (c.visible && /Staff|Wand/.test(c.name)) staff = c;
       }
     }
-    if (def.tint) {
+    const S = SKINS[gear.skin], W = WEAPONS[gear.weapon];
+    if (S) { // one restyled body material for the whole hero (all KayKit parts share one atlas material)
+      let bodyMat = null;
+      h.inner.traverse((m) => { if (m.isMesh && !/handslot/.test(m.parent?.name ?? '')) { bodyMat ??= lookMaterial(m.material, S); m.material = bodyMat; if (S.shadow === false) m.castShadow = false; } });
+    } else if (def.tint) {
       const tint = new THREE.Color(def.tint);
       h.inner.traverse((m) => { if (m.isMesh && !/handslot/.test(m.parent?.name ?? '')) { m.material = m.material.clone(); m.material.color.multiply(tint); } });
+    }
+    const restyle = (root) => { // weapon skin on a prop or projectile model (own material copy)
+      if (!W) return;
+      let mat = null;
+      const meshes = [];
+      root.traverse((m) => { if (m.isMesh && !m.userData.hull) meshes.push(m); });
+      for (const m of meshes) {
+        mat ??= lookMaterial(m.material, W.mat);
+        m.material = mat;
+        if (W.hull) { const hl = hullFor(m, W.hull); hl.userData.hull = true; m.add(hl); }
+      }
+    };
+    for (const side of ['handslotl', 'handslotr']) {
+      for (const c of h.inner.getObjectByName(side)?.children ?? []) if (c.visible && !/Spellbook/.test(c.name)) restyle(c);
     }
     // Ground ring so the hero stands out from the skeletons.
     const mark = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.56, 28), new THREE.MeshBasicMaterial({ color: def.color, transparent: true, opacity: 0.9 }));
@@ -303,27 +345,30 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
       if (mode === 'tumble') align.rotation.y = Math.PI / 2;     // blade plane along the flight path
       else if (mode === 'disc') align.rotation.x = -Math.PI / 2; // lies flat, like a frisbee
       else if (mode === 'point' || mode === 'whirl') align.rotation.x = Math.PI / 2; // tip forward / flat blade
+      restyle(p.obj);
       align.add(p.obj);
       spinner.add(align);
       if (def.handCopy) { // a half-size copy rides in the hand while the projectile is held
         const copy = prepare((await loadModel(def.proj.kit, def.proj.model)).scene.clone());
         if (heroDef !== def) return;
         copy.scale.setScalar(0.5); copy.quaternion.set(0, -1, 0, 0); // same mount as the KayKit hand props
+        restyle(copy);
         h.inner.getObjectByName('handslotr')?.add(copy);
         held.push(copy);
       }
     } else {
-      spinner.add(new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(1.6) })));
+      spinner.add(W ? orbMesh(W, 0.2) : new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(1.6) })));
       if (staff?.geometry) { // a glowing gem on the staff/wand tip: the spell is ready
         staff.geometry.computeBoundingBox();
         const b = staff.geometry.boundingBox, ws = staff.getWorldScale(new THREE.Vector3()).x || 1;
-        const gem = new THREE.Mesh(new THREE.SphereGeometry(0.08 / ws, 12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(1.6) }));
+        const gem = W ? orbMesh(W, 0.08 / ws) : new THREE.Mesh(new THREE.SphereGeometry(0.08 / ws, 12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(1.6) }));
         gem.position.set((b.min.x + b.max.x) / 2, b.max.y + 0.05 / ws, (b.min.z + b.max.z) / 2);
         staff.add(gem);
         held.push(gem);
       }
     }
-    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, depthWrite: false }));
+    const accent = W?.accent ?? color;
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 8), new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.35, depthWrite: false }));
     group.add(glow);
     // Where the dropped projectile lies: a ring on the ground and a light beam you can see from afar.
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.45, 0.6, 24), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
@@ -332,7 +377,17 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
     const trailGeo = new THREE.BufferGeometry();
     trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_LEN * 3), 3));
-    const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.8 }));
+    const T = TRAILS[gear.trail];
+    let trailMat;
+    if (T?.line === 'rainbow') { // vertex colors: red at the head … violet at the tail
+      const cols = new Float32Array(TRAIL_LEN * 3), c = new THREE.Color();
+      for (let i = 0; i < TRAIL_LEN; i++) { const f = (i / (TRAIL_LEN - 1)) * (RAINBOW.length - 1), k = Math.floor(f); c.setHex(RAINBOW[k]).lerp(new THREE.Color(RAINBOW[Math.min(k + 1, RAINBOW.length - 1)]), f - k); cols.set([c.r, c.g, c.b], i * 3); }
+      trailGeo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+      trailMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 });
+    } else trailMat = new THREE.LineBasicMaterial({ color: T?.line ?? accent, transparent: true, opacity: 0.8 });
+    const trail = new THREE.Line(trailGeo, trailMat);
+    fx.setTrailStyle(gear.trail || 'default', accent);
+    fx.setAura(S?.aura);
     trail.frustumCulled = false;
     const hole = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), new THREE.MeshBasicMaterial({ color: 0x1a0830, transparent: true, opacity: 0.7 }));
     hole.visible = false;
@@ -355,7 +410,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     hero = { obj: h.obj, mixer, legs: layer(false), arms: layer(true), shootClip: def.shoot, held: held.map((node) => ({ node, base: node.scale.clone() })), popT: 1, sector: null };
     animate(hero.legs, 'Idle', 0);
     animate(hero.arms, 'Idle', 0);
-    proj = { group, dir, bank, spinner, mode, glow, ring, beacon, trail, hole, aim, aimEnd, dots, color, filled: 0, heading: 0, turn: 0, px: 0, pz: 0, dropT: -1 };
+    proj = { group, dir, bank, spinner, mode, glow, ring, beacon, trail, hole, aim, aimEnd, dots, color, accent, filled: 0, heading: 0, turn: 0, px: 0, pz: 0, dropT: -1 };
     if (menu) placeCamera();
   }
 
@@ -382,7 +437,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   let shotFace = null;
 
   function effect(ev) {
-    const c = proj?.color ?? 0xffffff, t = ev.type;
+    const c = proj?.accent ?? 0xffffff, t = ev.type;
     if (t === 'kill') {
       fx.burst('hit', ev.x, 0.7, ev.z, c);
       const v = enemyViews.get(ev.id);
@@ -407,6 +462,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
       const v = enemyViews.get(ev.id);
       if (v) { const dx = ev.x - heroPos.x, dz = ev.z - heroPos.z, l = Math.hypot(dx, dz) || 1; v.flash = 1; v.knock = { x: dx / l, z: dz / l, big: true }; }
     } else if (t === 'drop') fx.burst('dust', ev.x, 0.05, ev.z, 0x6e6252);
+    else if (t === 'recall') { fx.burst('ring', ev.x, 0.6, ev.z, c); kick(0.15); }
     else if (t === 'spawn' && !ev.flying) { fx.burst('dust', ev.x, 0.05, ev.z, 0x6e6252); decal(ev.x, ev.z); }
     else if (t === 'shoot') {
       shootT = SHOOT_T;
@@ -492,6 +548,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
       for (const h of hero.held) h.node.scale.copy(h.base).multiplyScalar(s);
     }
     heroLight.position.set(g.hero.x, 2.5, g.hero.z);
+    fx.moveAura(g.hero.x, 0.75, g.hero.z, true);
   }
 
   function syncProjectile(g, dt) {
@@ -538,7 +595,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     proj.ring.position.set(p.x, 0.04, p.z);
     proj.ring.scale.setScalar(1 + Math.sin(g.time * 6) * 0.12);
     proj.beacon.position.set(p.x, 1.5, p.z);
-    fx.setTrail(proj.color, p.x, y, p.z, flying && !g.over && !g.choosing);
+    fx.setTrail(proj.accent, p.x, y, p.z, flying && !g.over && !g.choosing);
     const pos = proj.trail.geometry.attributes.position;
     if (flying) {
       pos.array.copyWithin(3, 0, (TRAIL_LEN - 1) * 3);
@@ -625,11 +682,12 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     fadeOccluders(dt);
     syncEnemies(g, dt);
     if (proj) syncProjectile(g, dt);
+    syncZone(g, dt);
   }
 
   // ---------- camera ----------
   const PITCH = THREE.MathUtils.degToRad(58);
-  let menu = false;      // false | 'menu' (orbit around the hero in the arena) | 'showcase' (hero close-up)
+  let menu = false;      // false | 'menu' (orbit around the hero in the arena) | 'showcase' (hero close-up) | 'shop'
   let view = 'tps';      // 'tps' (behind the shoulder) | 'top' (whole arena from above)
   let yaw = 0;           // third-person camera heading; 0 looks toward −z
   let shootT = 0;
@@ -648,10 +706,11 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   function placeCamera(dt = null) { // dt null: snap
     setFog(0);
     if (menu) {
-      const a = menuSpin, close = menu === 'showcase';
-      const r = close ? 4.2 : 7.5, hgt = close ? 1.25 : 3.6;
-      camera.position.set(heroPos.x + Math.sin(a) * r, hgt, heroPos.z + Math.cos(a) * r);
-      camera.lookAt(heroPos.x, close ? 0.25 : 1.1, heroPos.z); // close-up: aim low so the hero sits above the card
+      // [distance, camera height, look-at height]: the close-ups aim low so the hero sits above the
+      // screen's bottom card (the shop's card is taller, so it aims lower still).
+      const [r, hgt, look] = menu === 'shop' ? [5.0, 1.0, -0.95] : menu === 'showcase' ? [4.2, 1.25, 0.25] : [7.5, 3.6, 1.1];
+      camera.position.set(heroPos.x + Math.sin(menuSpin) * r, hgt, heroPos.z + Math.cos(menuSpin) * r);
+      camera.lookAt(heroPos.x, look, heroPos.z);
       return;
     }
     if (view === 'tps') {
@@ -711,9 +770,10 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
 
   function render(dt) {
     if (menu) {
-      menuSpin += dt * (menu === 'showcase' ? 0.35 : 0.12);
+      menuSpin += dt * (menu === 'menu' ? 0.12 : 0.35);
       placeCamera();
-      if (hero) { hero.obj.position.copy(heroPos); hero.obj.rotation.y = menuSpin + Math.PI * 0.15; hero.mixer.update(dt); }
+      if (hero) { hero.obj.position.copy(heroPos); hero.obj.rotation.y = menuSpin + Math.PI * 0.15; hero.mixer.update(dt); fx.moveAura(heroPos.x, 0.75, heroPos.z, true); }
+      if (proj && orbit && menu === 'shop') previewOrbit(dt);
       fadeOccluders(dt);
     } else if (view !== 'tps') placeCamera(); // re-placed every frame so the shake never adds up
     shake(dt);
@@ -722,6 +782,38 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     if (water?.material.uniforms?.time) water.material.uniforms.time.value += dt * 0.6;
     if (composer) composer.render(dt);
     else renderer.render(scene, camera);
+  }
+
+  // The shop's trail preview: the projectile circles the hero with its trail on.
+  function previewOrbit(dt) {
+    orbitA += dt * 2.6;
+    const R = 0.95, x = heroPos.x + Math.sin(orbitA) * R, z = heroPos.z + Math.cos(orbitA) * R, y = 0.85 + Math.sin(orbitA * 2) * 0.12;
+    proj.group.visible = true; proj.glow.visible = true; proj.ring.visible = proj.beacon.visible = false;
+    proj.group.scale.setScalar(1);
+    proj.group.position.set(x, y, z);
+    proj.dir.rotation.y = orbitA + Math.PI / 2; // heading along the circle
+    const s = proj.spinner, m = proj.mode;
+    if (m === 'tumble') s.rotation.x += 20 * dt; else if (m === 'disc') s.rotation.y += 18 * dt; else if (m === 'whirl') s.rotation.y += 22 * dt; else if (m === 'roll') { s.rotation.x += 7 * dt; s.rotation.y += 5 * dt; }
+    for (const h of hero.held) h.node.visible = false;
+    fx.setTrail(proj.accent, x, y, z, true);
+    const pos = proj.trail.geometry.attributes.position;
+    pos.array.copyWithin(3, 0, (TRAIL_LEN - 1) * 3);
+    pos.array[0] = x; pos.array[1] = y; pos.array[2] = z;
+    if (proj.filled < TRAIL_LEN) { for (let i = proj.filled; i < TRAIL_LEN; i++) pos.array.set([x, y, z], i * 3); proj.filled = TRAIL_LEN; }
+    pos.needsUpdate = true;
+    proj.trail.visible = true;
+  }
+  // Cosmetics: presetGear before the first hero loads; setGear rebuilds the current hero in the new look
+  // (preview: the shop's orbiting-trail preview).
+  function presetGear(g) { gear = { ...gear, ...g }; }
+  function setGear(g, preview = false) {
+    const next = { ...gear, ...g };
+    if (next.skin === gear.skin && next.weapon === gear.weapon && next.trail === gear.trail && orbit === preview) return Promise.resolve();
+    gear = next; orbit = preview;
+    const d = heroDef;
+    if (!d) return Promise.resolve();
+    heroDef = null;
+    return setHero(d);
   }
 
   function screenToGround(cx, cy) {
@@ -768,6 +860,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     heroPos.set(0, 0, 3); pivot.copy(heroPos);
     heroFace = Math.PI; trauma = 0; shootT = 0;
     for (const m of decals) m.visible = false;
+    zone.visible = false; zone.userData.x = NaN;
     if (proj) {
       proj.filled = 0; proj.dropT = -1;
       proj.group.visible = proj.ring.visible = proj.beacon.visible = false;
@@ -795,5 +888,5 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     if (proj) proj.group.visible = proj.ring.visible = proj.beacon.visible = false;
   }
 
-  return { setLocation, setHero, sync, render, resize, effect, screenToGround, worldToScreen, setMenu, setView, clearRun, setAim, renderer };
+  return { setLocation, setHero, sync, render, resize, effect, screenToGround, worldToScreen, setMenu, setView, clearRun, setAim, renderer, setGear, presetGear };
 }

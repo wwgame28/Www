@@ -88,6 +88,16 @@ export function launch(weaponId, hero, target, mods = {}) {
   return p;
 }
 
+// Recall (the ↩ button): a dropped projectile flies straight back to the hand, through everything,
+// hitting enemies on the way. It is a new little shot: its own kills, no catch ×2.
+export const RECALL_SPEED = 16;
+export function recall(p) {
+  p.state = 'flying';
+  p.weapon = 'recall';
+  p.t = 0; p.kills = 0; p.banks = 0; p.portal = false; p.pull = null;
+  p.hits = new Set();
+}
+
 export function drop(p) {
   p.state = 'dropped';
   p.pull = null;
@@ -95,6 +105,13 @@ export function drop(p) {
 }
 
 const STEPS = {
+  recall(p, dt, world) {
+    const dx = world.hero.x - p.x, dz = world.hero.z - p.z, d = Math.hypot(dx, dz);
+    if (d < 0.6) { p.state = 'held'; p.events.push('return'); return; }
+    p.vx = (dx / d) * RECALL_SPEED; p.vz = (dz / d) * RECALL_SPEED;
+    const s = Math.min(d, RECALL_SPEED * dt);
+    p.x += (dx / d) * s; p.z += (dz / d) * s;
+  },
   ricochet(p, dt, world) {
     p.x += p.vx * dt; p.z += p.vz * dt;
     if (bounce(p, world)) {

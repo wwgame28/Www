@@ -126,6 +126,13 @@ Presentation:
 - Each location has a fixed, mirrored, hand-placed layout instead of a random scatter: a clear start, open spawn lanes, no gaps under 1 m, and its own light and fog (dark places get a plain fog-colored background).
 - Walkers walk round a solid that blocks their way instead of pressing into it, never leave the arena, and never rise inside a solid.
 
+## v1.6 — shop and three new mechanics
+- **Shop (cosmetics only, so records stay comparable).** 15 items, each for any hero: 5 hero skins (600 coins), 5 weapon skins (400; the prop in the hand, the projectile, mage orbs and staff gems), 5 flight trails (300, Радуга 1000). `src/shop.js` (pure, tested) holds the catalog, today's deals (one item per category at −30 %, the same for everybody that day), coins for a run and buy/equip; `src/cosmetics.js` builds the looks (one shader patch over cloned KayKit materials, procedural env map, particle presets); `render.setGear()` rebuilds the hero in a look, the shop camera (`setMenu('shop')`) frames the hero above the shop card, and a trail is previewed on the weapon circling the hero.
+- **Coins:** score ÷ 10 per finished run (at most 1 000), ×2 for a new record on that location, +20 for the first daily challenge of the day; shown counting up on the game-over screen. Saves keep `coins`, `owned`, `look`, `dailyBonus`; older saves start at 0.
+- **Trick shots:** a kill after bounces (+10 per bounce, up to 3), through a portal (+30) or from 12 m away (+20) scores extra; the trick names pop up over the kill.
+- **Golden zone:** a 2 m golden circle on a free spot, moved every wave (seeded); kills inside it score ×3.
+- **Recall (↩):** a dropped projectile can be called back once every 6 s; it flies straight to the hand, through obstacles, hitting enemies on the way (no catch ×2). In third person the fire button turns into ↩; in the top-down view a ↩ button appears.
+
 ## Testing
 - `node --test tests/*.test.mjs`: RNG determinism, wave determinism, each weapon's trajectory invariants, kill/combo/catch scoring, pickup, share round-trip.
 - Playwright (Chromium, iPhone 14 profile, served locally): menu renders, a run starts, taps fire, no console errors, screenshots in portrait.
