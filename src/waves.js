@@ -6,6 +6,12 @@ export const ENEMY_TYPES = {
   tank: { speed: 1.1, hp: 2, r: 0.55, from: 5, model: ['Skeleton_Warrior'], scale: 1.25 },
   splitter: { speed: 1.8, hp: 1, r: 0.45, from: 7, model: ['Skeleton_Mage'], scale: 1.05 },
   ufo: { speed: 2.2, hp: 1, r: 0.5, from: 9, model: ['enemy-ufo-a'], scale: 1, flying: true },
+  // «Приключение» only (story: never in arcade waves): kinds with their own behaviour (story/foes.js).
+  shooter: { speed: 1.3, hp: 1, r: 0.4, model: ['Skeleton_Mage'], scale: 1, story: true, range: 6.5, fireEvery: 2.6 },
+  golem: { speed: 0.9, hp: 3, r: 0.6, model: ['Skeleton_Warrior'], scale: 1.45, story: true },
+  burrower: { speed: 2.2, hp: 1, r: 0.4, model: ['Skeleton_Minion'], scale: 1, story: true, burrow: true },
+  blinker: { speed: 1.4, hp: 1, r: 0.4, model: ['Skeleton_Mage'], scale: 1.05, story: true, blink: true },
+  boss: { speed: 1.6, hp: 12, r: 0.9, model: ['Skeleton_Warrior'], scale: 2.1, story: true },
 };
 
 const WEIGHTS = { grunt: 6, runner: 3, tank: 2, splitter: 2, ufo: 2 };
@@ -13,7 +19,7 @@ const WEIGHTS = { grunt: 6, runner: 3, tank: 2, splitter: 2, ufo: 2 };
 // Deterministic spawn list for a wave: same seed + wave → same enemies, sides and timing.
 export function planWave(seed, wave) {
   const rng = createRng(`${seed}:wave:${wave}`);
-  const types = Object.keys(ENEMY_TYPES).filter((t) => ENEMY_TYPES[t].from <= wave);
+  const types = Object.keys(ENEMY_TYPES).filter((t) => !ENEMY_TYPES[t].story && ENEMY_TYPES[t].from <= wave);
   const total = types.reduce((s, t) => s + WEIGHTS[t], 0);
   const count = 4 + 2 * wave;
   const interval = Math.max(0.35, 1.4 - wave * 0.08);

@@ -186,7 +186,7 @@ export function createFx(scene, { budget = 1 } = {}) {
   let flames = [];
   function setFlames(points) {
     for (const ps of flames) { batch.deleteSystem(ps); ps.dispose(); }
-    flames = points.slice(0, 10).map(({ x, y, z, color = 0xff9a3a, scale = 1 }) => {
+    flames = points.slice(0, 14).map(({ x, y, z, color = 0xff9a3a, scale = 1 }) => {
       const ps = make({ rate: n(16 * scale), speed: [0.5, 1.1], life: [0.35, 0.6], size: [0.1 * scale, 0.2 * scale], looping: true, cone: true, radius: 0.05 * scale });
       ps.startColor = new ConstantColor(toV4(color));
       ps.emitter.position.set(x, y, z);
@@ -194,5 +194,36 @@ export function createFx(scene, { budget = 1 } = {}) {
     });
   }
 
-  return { update: (dt) => batch.update(dt), burst, setTrail, setTrailStyle, setFlames, setAura, moveAura };
+  // Weather of a story zone: one looping system that follows the hero (rain, blizzard, sand…).
+  const WEATHER = {
+    rain: { rate: 150, life: [0.5, 0.8], speed: [0.2, 0.6], size: [0.05, 0.09], gravity: 32, tile: 0, color: 0xc8dcff, alpha: 0.75 },
+    snow: { rate: 110, life: [3.5, 5.5], speed: [0.2, 0.8], size: [0.12, 0.22], gravity: 0.7, wind: [2.2, 0], tile: 2, blend: 'norm', color: 0xffffff },
+    flakes: { rate: 26, life: [4, 6], speed: [0.1, 0.4], size: [0.1, 0.18], gravity: 0.5, tile: 2, blend: 'norm', color: 0xffffff },
+    sand: { rate: 46, life: [1.6, 2.6], speed: [0.2, 0.8], size: [0.6, 1.3], wind: [5, 1.2], tile: 3, blend: 'norm', color: 0xe8c890, alpha: 0.55 },
+    sparkle: { rate: 26, life: [2, 3.2], speed: [0.1, 0.4], size: [0.12, 0.24], up: 0.5, tile: 1, color: 0xe0b8ff },
+    dust: { rate: 20, life: [3, 5], speed: [0.05, 0.25], size: [0.06, 0.12], up: 0.08, tile: 0, color: 0xa890ff, alpha: 0.6 },
+  };
+  let weather = null;
+  function setWeather(kind) {
+    if (weather) { batch.deleteSystem(weather); scene.remove(weather.emitter); weather.dispose(); weather = null; }
+    const w = WEATHER[kind];
+    if (!w) return;
+    weather = new ParticleSystem({
+      duration: 1, looping: true, worldSpace: true, autoDestroy: false,
+      startLife: new IntervalValue(...w.life), startSpeed: new IntervalValue(...w.speed), startSize: new IntervalValue(...w.size),
+      startColor: new ConstantColor(toV4(w.color, w.alpha ?? 1)), emissionOverTime: new ConstantValue(n(w.rate)),
+      shape: new SphereEmitter({ radius: 11, thickness: 1, arc: Math.PI * 2 }),
+      material: w.blend === 'norm' ? normal : material, renderMode: RenderMode.BillBoard, ...TILES, startTileIndex: new ConstantValue(w.tile),
+    });
+    weather.addBehavior(new ColorOverLife(new Gradient([[new QVec3(1, 1, 1), 0], [new QVec3(1, 1, 1), 1]], [[0, 0], [1, 0.15], [1, 0.8], [0, 1]])));
+    if (w.gravity) weather.addBehavior(new ApplyForce(new QVec3(0, -1, 0), new ConstantValue(w.gravity)));
+    if (w.up) weather.addBehavior(new ApplyForce(new QVec3(0, 1, 0), new ConstantValue(w.up)));
+    if (w.wind) weather.addBehavior(new ApplyForce(new QVec3(w.wind[0], 0, w.wind[1]).normalize(), new ConstantValue(Math.hypot(...w.wind))));
+    weather.emitter.scale.set(1, 0.35, 1); // a wide flat cloud of particles
+    batch.addSystem(weather);
+    scene.add(weather.emitter);
+  }
+  function moveWeather(x, z, y = 5) { if (weather) weather.emitter.position.set(x, y, z); }
+
+  return { update: (dt) => batch.update(dt), burst, setTrail, setTrailStyle, setFlames, setAura, moveAura, setWeather, moveWeather };
 }

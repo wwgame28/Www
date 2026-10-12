@@ -3,12 +3,13 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Water } from 'three/addons/objects/Water.js';
 import { EffectComposer, RenderPass, EffectPass, BloomEffect, VignetteEffect } from 'postprocessing';
-import { ARENA, solidFrom } from './locations.js';
+import { ARENA } from './locations.js';
 import { solidExtent } from './solid.js';
 import { ENEMY_TYPES } from './waves.js';
 import { createFx } from './fx.js';
 import { SKINS, WEAPONS, TRAILS, RAINBOW, lookMaterial, orbMesh, hullFor } from './cosmetics.js';
 import { recolorPixels, mainClothHue } from './story/hero.js';
+import { createStoryScene, zoneSaved } from './story/scene.js';
 
 const TRAIL_LEN = 24;
 const AIM_MAX = 200;
@@ -85,8 +86,8 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   let gear = { skin: null, weapon: null, trail: null }; // cosmetics worn (shop ids; null = the default look)
   let orbit = false; // shop trail preview: the weapon circles the hero
   let orbitA = 0;
-  let zoneOn = null;  // the story zone on show (setZone), else null
-  let storyV = null;  // its villagers, targets and shard views
+  let storyOn = false;   // a story zone is on show (setZone)
+  let enemyTint = null;  // its skeletons' color (sandy, icy, mossy…)
 
   // Dark patches where skeletons climb out of the ground (a short warning before they come).
   const decals = Array.from({ length: 6 }, () => {
@@ -221,7 +222,9 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     dying.length = 0;
     water = null;
     occluders.length = 0;
-    zoneOn = null; storyV = null;
+    if (storyOn) storyScene.clear();
+    storyOn = false; enemyTint = null;
+    fx.setWeather(null);
     sun.target.position.set(0, 0, 0);
     level = new THREE.Group();
 
@@ -299,160 +302,24 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   }
 
   // ---------- story zones ----------
-  // Grass with the roads painted on (one canvas texture) and a darker rim out to the fog.
-  function zoneGround(area) {
-    const { W, D } = area.size, N = 1024, c = document.createElement('canvas');
-    c.width = c.height = N;
-    const g = c.getContext('2d'), sx = N / (W * 2), sz = N / (D * 2);
-    const base = new THREE.Color(area.ground), road = new THREE.Color(area.road);
-    g.fillStyle = `#${base.getHexString()}`;
-    g.fillRect(0, 0, N, N);
-    let seed = 7;
-    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    g.globalAlpha = 0.35;
-    for (let i = 0; i < 260; i++) { // soft lighter and darker patches
-      g.fillStyle = `#${base.clone().multiplyScalar(0.88 + rnd() * 0.24).getHexString()}`;
-      g.beginPath(); g.arc(rnd() * N, rnd() * N, 10 + rnd() * 40, 0, Math.PI * 2); g.fill();
-    }
-    g.lineCap = g.lineJoin = 'round';
-    for (const [w, col, a] of [[4, base.clone().lerp(road, 0.5), 0.6], [3, road, 1]]) {
-      g.strokeStyle = `#${col.getHexString()}`; g.globalAlpha = a; g.lineWidth = w * sx;
-      for (const line of area.roads) {
-        g.beginPath();
-        line.forEach(([x, z], i) => g[i ? 'lineTo' : 'moveTo']((x + W) * sx, (z + D) * sz));
-        g.stroke();
-      }
-    }
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W * 2, D * 2), new THREE.MeshLambertMaterial({ map: tex }));
-    const rim = new THREE.Mesh(new THREE.PlaneGeometry(W * 2 + 140, D * 2 + 140), new THREE.MeshLambertMaterial({ color: base.clone().multiplyScalar(0.8) }));
-    for (const m of [floor, rim]) { m.rotation.x = -Math.PI / 2; m.receiveShadow = true; }
-    rim.position.y = -0.02;
-    return [rim, floor];
-  }
-
-  let markTex = null; // the quest giver's «!»
-  function questMark() {
-    if (!markTex) {
-      const c = document.createElement('canvas');
-      c.width = c.height = 128;
-      const g = c.getContext('2d');
-      g.fillStyle = '#ffd34d'; g.strokeStyle = '#14182b'; g.lineWidth = 10;
-      g.beginPath(); g.arc(64, 64, 52, 0, Math.PI * 2); g.fill(); g.stroke();
-      g.fillStyle = '#14182b'; g.font = '900 84px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText('!', 64, 70);
-      markTex = new THREE.CanvasTexture(c);
-      markTex.colorSpace = THREE.SRGBColorSpace;
-    }
-    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: markTex, depthWrite: false }));
-    m.scale.setScalar(0.5); m.position.y = 1.85; m.visible = false;
-    return m;
-  }
-
-  async function villagerView(v) {
-    const h = await instance('heroes', v.model, { height: 1.3 });
-    for (const side of ['handslotl', 'handslotr']) for (const c of h.inner.getObjectByName(side)?.children ?? []) c.visible = !!v.hold?.includes(c.name);
-    if (v.tint) {
-      const tint = new THREE.Color(v.tint);
-      h.inner.traverse((m) => { if (m.isMesh && !/handslot/.test(m.parent?.name ?? '')) { m.material = m.material.clone(); m.material.color.multiply(tint); } });
-    }
-    const mark = questMark();
-    h.obj.add(mark);
-    h.obj.position.set(v.x, 0, v.z); h.obj.rotation.y = v.facing;
-    const vw = { obj: h.obj, mixer: new THREE.AnimationMixer(h.inner), animations: h.animations, mark, face: v.facing };
-    animate(vw, 'Idle', 0);
-    vw.mixer.update(Math.random() * 2); // idles out of step
-    return vw;
-  }
-
-  // A crystal shard: a glowing gem over a ring, with a beam that shows it from afar.
-  function shardView() {
-    const group = new THREE.Group();
-    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), new THREE.MeshStandardMaterial({ color: 0x9ff6ff, emissive: 0x38d8ff, emissiveIntensity: 1.4, roughness: 0.15, metalness: 0.2, flatShading: true }));
-    gem.scale.y = 1.6;
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 4, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0x7ff3ff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false }));
-    beam.position.y = 2;
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.55, 28), new THREE.MeshBasicMaterial({ color: 0x7ff3ff, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
-    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04;
-    group.add(gem, beam, ring);
-    group.visible = false;
-    return { group, gem, ring };
-  }
-
-  // A zone of the story's island: ground and roads, props (with colliders in the simulation), scenery
-  // around the edge, villagers, the campfire's flames and the shard.
-  async function setZone(area) {
-    newLevel(area);
-    zoneOn = area;
-    level.add(...zoneGround(area));
-    const sv = storyV = { villagers: new Map(), targets: null, targetViews: [], shard: shardView() };
-    const jobs = [];
-    for (const e of area.props) {
-      const o = solidFrom(area.kit, e);
-      jobs.push(instance(o.kit, o.model, { ...o.fit, center: true }).then(({ obj }) => {
-        obj.position.set(o.x, 0, o.z); obj.rotation.y = o.rot; level.add(obj);
-        if (o.h > 1.2) addOccluder(obj, o.x, o.z, solidExtent(o));
-      }));
-    }
-    for (const [m, x, z, rot, size] of area.scenery) {
-      const [kit, model] = m.startsWith('@') ? m.slice(1).split('/') : [area.kit, m];
-      jobs.push(instance(kit, model, { ...(typeof size === 'object' ? { height: size.h } : { r: size / 2 }), center: true }).then(({ obj }) => {
-        obj.position.set(x, 0, z); obj.rotation.y = (rot * Math.PI) / 180; level.add(obj);
-      }));
-    }
-    for (const v of area.villagers) jobs.push(villagerView(v).then((vw) => { sv.villagers.set(v.id, vw); level.add(vw.obj); }));
-    jobs.push(loadModel('hex', 'target'));
-    await Promise.all(jobs);
-    level.add(sv.shard.group);
-    fx.setFlames([{ x: area.campfire.x, y: 0.28, z: area.campfire.z, scale: 1.5 }]);
+  // A zone of the story's island, drawn by story/scene.js. A saved kingdom gets its clear sky back.
+  async function setZone(area, story) {
+    const saved = zoneSaved(area, story);
+    newLevel({ ...area, look: saved && area.lookDone ? area.lookDone : area.look });
+    storyOn = true;
+    enemyTint = area.enemyTint !== undefined ? new THREE.Color(area.enemyTint) : null;
+    heroLight.intensity = area.dark ? 30 : 0;
+    const own = level;
+    await storyScene.build(area, story, level);
+    if (own !== level) return; // another place was opened while this one loaded
     scene.add(level);
     await Promise.all(Object.values(ENEMY_TYPES).flatMap((t) => t.model).map((m) => loadModel(kitFor(m), m)));
   }
 
+  let lastG = null; // the story world last drawn (scene.js effects look up enemies in it)
   function syncStory(g, dt) {
-    const sv = storyV;
-    if (!sv) return;
-    for (const s of g.villagers) {
-      const v = sv.villagers.get(s.id);
-      if (!v) continue;
-      v.mark.visible = s.quest;
-      v.mark.position.y = 1.85 + Math.sin(g.time * 3) * 0.06;
-      v.face += angleTo(v.face, s.look ?? s.facing) * (1 - Math.exp(-6 * dt)); // turns to the hero nearby
-      v.obj.rotation.y = v.face;
-    }
-    if (sv.targets !== g.targets) { // a new set of targets: build their views
-      for (const t of sv.targetViews) level.remove(t.obj);
-      const own = sv.targets = g.targets;
-      sv.targetViews = [];
-      for (const t of own) {
-        instance('hex', 'target', { height: 1.5, center: true }).then(({ obj }) => {
-          if (storyV !== sv || sv.targets !== own) return;
-          const pivot = new THREE.Group(); // tips over around its foot
-          pivot.rotation.order = 'YXZ';
-          pivot.add(obj);
-          pivot.position.set(t.x, 0, t.z); pivot.rotation.y = Math.atan2(heroPos.x - t.x, heroPos.z - t.z);
-          level.add(pivot);
-          sv.targetViews.push({ obj: pivot, t });
-        });
-      }
-    }
-    for (const tv of sv.targetViews) {
-      const t = tv.t;
-      if (!t.hit) continue;
-      const k = Math.min(1, t.t / 0.35);
-      tv.obj.rotation.x = -(Math.PI / 2) * k * k; // falls away from the hero
-      tv.obj.position.y = -Math.max(0, t.t - 1.2) * 1.2;
-      tv.obj.visible = t.t < 2.4;
-    }
-    const sh = sv.shard;
-    sh.group.visible = !!g.shard;
-    if (g.shard) {
-      sh.group.position.set(g.shard.x, 0, g.shard.z);
-      sh.gem.position.y = 0.75 + Math.sin(g.time * 2.5) * 0.12;
-      sh.gem.rotation.y += dt * 1.8;
-      sh.ring.scale.setScalar(1 + Math.sin(g.time * 5) * 0.1);
-    }
+    lastG = g;
+    storyScene.sync(g, dt, camera);
     if (hero) hero.obj.visible = !(g.hurtT > 0 && !g.over) || Math.floor(g.time * 14) % 2 === 0; // blinks while safe after a hit
     // The sun's shadow box follows the hero around the big zone.
     const [sx, sy, sz] = look.sunPos || [-6, 14, 6];
@@ -618,13 +485,24 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
 
   async function addEnemyView(e) {
     const def = ENEMY_TYPES[e.type];
-    const v = await instance(kitFor(e.model), e.model, def.flying ? { r: e.r } : { height: 1.25 * def.scale });
+    const scale = e.scale ?? def.scale;
+    const v = await instance(kitFor(e.model), e.model, def.flying ? { r: e.r } : { height: 1.25 * scale });
     // Own materials (clones share them) so a hit can flash just this one white.
     const mats = [];
     v.obj.traverse((m) => { if (m.isMesh && m.material.emissive) { m.material = m.material.clone(); m.material.emissive.setRGB(1, 1, 1); m.material.emissiveIntensity = 0; mats.push(m.material); } });
+    for (const m of mats) {
+      if (enemyTint) m.color.multiply(enemyTint);
+      if (e.decoy) Object.assign(m, { transparent: true, opacity: 0.5, depthWrite: false }); // the Mirror Mage's clones
+    }
+    if (e.boss?.def.crown) { // the Skeleton King
+      const c = storyScene.crown(0xb56cff);
+      c.scale.setScalar(scale * 1.15);
+      c.position.y = new THREE.Box3().setFromObject(v.obj).max.y - 0.1 * scale;
+      v.obj.add(c);
+    }
     const walk = e.type === 'runner' ? 'Running_A' : 'Running_B';
     const vw = { obj: v.obj, animations: v.animations, mixer: v.animations.length ? new THREE.AnimationMixer(v.inner) : null, flying: def.flying,
-      walk, stride: ENEMY_STRIDE[walk] * def.scale, spd: e.speed, pop: e.split ? 0 : 1, flash: 0, mats, knock: null };
+      walk, stride: ENEMY_STRIDE[walk] * scale, spd: e.speed, pop: e.split ? 0 : 1, flash: 0, mats, knock: null };
     const a = animate(vw, e.rise > 0 ? 'Spawn_Ground' : walk, 0);
     if (a && e.rise > 0) a.timeScale = a.getClip().duration / Math.max(0.4, e.rise); // out of the ground exactly when the rise ends
     v.obj.position.set(e.x, 0, e.z);
@@ -671,18 +549,26 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     else if (t === 'heal') fx.burst('ring', ev.x, 0.9, ev.z, 0x7ee07a);
     else if (t === 'wake') fx.burst('ring', ev.x, 0.6, ev.z, 0xffd34d);
     else if (t === 'target') { fx.burst('hit', ev.x, 1.0, ev.z, 0xffd34d); kick(0.25); }
-    else if (t === 'shard') { fx.burst('big', ev.x, 0.8, ev.z, 0x7ff3ff); kick(0.3); }
+    else if (t === 'block') { fx.burst('ring', ev.x, 1.2, ev.z, 0x9fd8ff); kick(0.2); }
+    else if (t === 'bossDown') { fx.burst('big', ev.x, 1, ev.z, 0xffe27a); fx.burst('big', ev.x, 1.4, ev.z, 0xff4d4d); kick(0.9); }
+    else if (t === 'bossStunned') { const v = enemyViews.get(ev.id); if (v) fx.burst('ring', v.obj.position.x, 2.4, v.obj.position.z, 0xffe27a); }
     else if (t === 'shoot') {
       shootT = SHOOT_T;
       shotFace = ev.tx !== undefined ? Math.atan2(ev.tx - ev.x, ev.tz - ev.z) : null;
       if (hero) hero.arms.current = null; // restart the throw even if the last one is still playing
     }
+    if (storyOn && lastG) storyScene.effect(ev, lastG);
   }
 
-  function flash(v, dt) {
-    if (v.flash <= 0) return;
+  // A hit flashes the enemy white; «Иней» (ice) tints it frosty blue while it stays frozen.
+  function flash(v, dt, ice = false) {
+    if (v.flash <= 0 && ice === !!v.ice) return;
     v.flash = Math.max(0, v.flash - dt / 0.1); // stays white through a hit-stop (dt 0)
-    for (const m of v.mats) m.emissiveIntensity = 1.6 * v.flash;
+    v.ice = ice;
+    for (const m of v.mats) {
+      if (v.flash > 0 || !ice) { m.emissive.setRGB(1, 1, 1); m.emissiveIntensity = 1.6 * v.flash; }
+      else { m.emissive.setRGB(0.3, 0.7, 1); m.emissiveIntensity = 0.9; }
+    }
   }
 
   // ---------- per frame ----------
@@ -836,7 +722,21 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
         continue;
       }
       if (!v) continue;
-      if (e.dead && e.vanish) { level.remove(v.obj); enemyViews.delete(e.id); continue; }
+      if (e.dead && e.vanish) { // gone in a puff (a clone fading, the rest of a raid when the hero faints)
+        fx.burst(e.decoy ? 'ring' : 'dust', e.x, e.decoy ? 0.9 : 0.1, e.z, e.decoy ? 0xb56cff : 0x6e6252);
+        level.remove(v.obj); enemyViews.delete(e.id); continue;
+      }
+      if (e.under) { // a burrower travels under the sand: only its dust shows
+        v.obj.visible = false; v.wasUnder = true;
+        if ((v.dustT = (v.dustT || 0) - dt) <= 0) { v.dustT = 0.45; fx.burst('dust', e.x, 0.05, e.z, 0xc8a060); }
+        v.obj.position.set(e.x, 0, e.z);
+        continue;
+      }
+      if (v.wasUnder) { // …and climbs back out
+        v.wasUnder = false; v.obj.visible = true; v.current = null;
+        const a = animate(v, 'Spawn_Ground', 0);
+        if (a) a.timeScale = a.getClip().duration / 0.6;
+      }
       if (e.dead) {
         const kn = v.knock || { x: Math.sin(e.facing + Math.PI), z: Math.cos(e.facing + Math.PI), big: false };
         const big = kn.big && !!THREE.AnimationClip.findByName(v.animations, 'Death_C_Skeletons');
@@ -859,8 +759,8 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
       v.pop = Math.min(1, v.pop + dt / 0.15); // split children pop in
       const k = e.hurtT / 0.2, base = 0.3 + 0.7 * v.pop; // squash on a hit
       v.obj.scale.set(base * (1 + 0.25 * k), base * (1 - 0.2 * k), base * (1 + 0.25 * k));
-      flash(v, dt);
-      v.mixer?.update(dt);
+      flash(v, dt, e.frozenT > 0);
+      v.mixer?.update(e.frozenT > 0 ? 0 : dt);
     }
     for (let i = dying.length - 1; i >= 0; i--) {
       const d = dying[i], o = d.view.obj;
@@ -892,7 +792,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     syncEnemies(g, dt);
     if (proj) syncProjectile(g, dt);
     syncZone(g, dt);
-    if (g.mode === 'story') syncStory(g, dt);
+    if (g.mode === 'story' && storyOn) syncStory(g, dt);
   }
 
   // ---------- camera ----------
@@ -903,6 +803,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   let shootT = 0;
   let heroFace = Math.PI;
   const heroPos = new THREE.Vector3(0, 0, 3);
+  const storyScene = createStoryScene({ instance, loadModel, animate, addOccluder, recolorMaterial, fx, texLoader, kick, high, heroPos });
   const pivot = new THREE.Vector3(0, 0, 3); // smoothed hero position the third-person camera follows
   // Third person: a vertical FOV that keeps ~42° across a portrait phone (62–72°).
   const tpsFov = () => clamp(THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(21)) / Math.max(0.1, camera.aspect))), 62, 72);
@@ -986,7 +887,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
       if (proj && orbit && menu === 'shop') previewOrbit(dt);
       fadeOccluders(dt);
     } else if (view !== 'tps') placeCamera(); // re-placed every frame so the shake never adds up
-    if (storyV) for (const v of storyV.villagers.values()) v.mixer.update(dt);
+    if (storyOn) storyScene.update(dt);
     shake(dt);
     adaptResolution(dt);
     fx.update(dt);

@@ -13,11 +13,12 @@ import * as progress from './progress.js';
 import * as shop from './shop.js';
 import { $, show, toast, renderHero, renderLocations, popup, banner, aimAt } from './ui.js';
 import { getWeapon } from './weapons.js';
-import { createWorld, stepWorld, nextLine } from './story/world.js';
-import { ZONES } from './story/data.js';
-import { taskOf, chapterOf, repairHero } from './story/quests.js';
+import { createWorld, stepWorld, nextLine, DASH } from './story/world.js';
+import { ZONES } from './story/zones/index.js';
+import { GEMS, getGem, getBlessing } from './story/data.js';
+import { taskOf, repairHero } from './story/quests.js';
 import { heroDef } from './story/hero.js';
-import { renderCreator, renderHearts, chapterCard } from './story/ui.js';
+import { renderCreator, renderHearts, chapterCard, giftCard, renderMap } from './story/ui.js';
 
 const STEP = 1 / 60;
 const data = progress.load();
@@ -114,7 +115,8 @@ function refreshMenu() {
   $('menuLocation').textContent = l.name;
   $('menuBest').textContent = data.best[l.id] || 0;
   $('menuCoins').textContent = data.coins;
-  $('storySub').textContent = data.story.hero ? chapterOf(data.story)?.title ?? 'Остров спасён!' : 'Новое: открытый мир';
+  const st = data.story;
+  $('storySub').textContent = !st.hero ? 'Новое: 7 царств и их королевы' : st.done.includes('finale') ? 'Остров спасён!' : `Камни королев: ${st.gems.length} из ${GEMS.length}`;
   const today = todayKey();
   const d = daily(today);
   $('dailySub').textContent = `${getLocation(d.locationId).name} · ${getHero(d.heroId).name}${data.daily[today] ? ` · 🏆 ${data.daily[today]}` : ''}`;
@@ -172,6 +174,7 @@ function pause() {
   if (mode !== 'playing') return;
   mode = 'paused';
   input.setEnabled(false);
+  if (game.mode === 'story') renderMap({ ...game.story, zone: game.area.id }, game.area.id);
   show('pause');
 }
 
@@ -398,7 +401,7 @@ function frame(now) {
   const k = mode === 'paused' ? 0 : warp(dt); // hit-stop / slow motion
   if (mode === 'playing' && game) {
     acc += dt * k;
-    while (acc >= STEP) {
+    while (acc >= STEP && mode === 'playing') {
       acc -= STEP;
       const tap = input.takeFire();
       let recallNow = input.takeRecall();
@@ -413,7 +416,7 @@ function frame(now) {
         else { fire = view.screenToGround(q.x, q.y); aimAt(q.x, q.y); }
       } else if (queued && (queued.t -= STEP) <= 0) queued = null;
       const wasFlying = game.projectile.state === 'flying';
-      if (game.mode === 'story') { stepWorld(game, STEP, { move: moveVector(), fire, recall: recallNow, talk: talkPress }); talkPress = false; }
+      if (game.mode === 'story') { stepWorld(game, STEP, { move: moveVector(), fire, recall: recallNow, talk: talkPress, dash: dashPress }); talkPress = dashPress = false; }
       else step(game, STEP, { move: moveVector(), fire, recall: recallNow });
       for (const ev of game.events) handle(ev);
       game.events.length = 0;
@@ -421,6 +424,7 @@ function frame(now) {
       if (wasFlying && game.projectile.state !== 'flying') endShot();
       if (timeFx[0]?.k === 0) { acc = 0; break; } // a hit-stop just started: freeze on this frame
     }
+    if (mode !== 'playing') acc = 0;
     yaw -= input.takeLook() + input.edgeTurn() * EDGE_TURN * dt;
     updateLock();
     // Aim line: the real trajectory toward the held finger (or the crosshair target in third person).
@@ -560,13 +564,13 @@ for (const t of document.querySelectorAll('#shop .tab')) {
 }
 
 // ---------- adventure («Приключение») ----------
-// The open world: the island's zones (story/data.js), the creator, hearts, tasks and dialogues.
-const STORY_ZONE = 'village';
+// The open world: the island's kingdoms (story/zones), the creator, hearts, tasks and dialogues.
 let talkPress = false;   // «Говорить» was tapped; read by the next simulation step
+let dashPress = false;   // ⚡ was tapped
 let draft = null;        // the creator's choices while it is open
 let creatorFirst = false; // the first visit: its button starts the adventure
 let creatorTab = 'look';
-const storyHud = { hearts: -1, task: '' };
+const storyHud = { hearts: -1, task: '', boss: '', temp: -1, dash: -1 };
 const defaultLook = () => ({ base: 'Rogue_Hooded', palette: 'forest', skin: 'medium', weapon: 'ricochet', name: 'Герой' });
 
 let storyLoading = false;
@@ -579,26 +583,57 @@ async function enterStory() {
   audio.unlock();
   screen.orientation?.lock?.('portrait').catch(() => {});
   input.setEnabled(false);
-  $('loadingText').textContent = 'Загрузка: Деревня…';
-  show('loading');
-  await view.setZone(ZONES[STORY_ZONE]);
-  sceneKey = `story:${STORY_ZONE}`;
+  const look = data.story.hero || defaultLook();
+  await openZone(ZONES[data.story.zone] ? data.story.zone : 'village', null);
   storyOn = true;
   document.body.classList.add('story', 'tps');
   view.setView('tps');
-  const look = data.story.hero || defaultLook();
   await wearLook(look);
-  game = createWorld({ zoneId: STORY_ZONE, story: data.story, weaponId: look.weapon, heroName: look.name });
-  view.clearRun(game.hero);
-  storyHud.hearts = -1; storyHud.task = '';
   if (!data.story.hero) openCreator(true);
   else playStory(true);
 }
 
+// Builds a kingdom and a fresh world in it. arrive: where a gate brings the hero (else the zone's start).
+async function openZone(id, arrive) {
+  $('loadingText').textContent = `Загрузка: ${ZONES[id].name}…`;
+  show('loading');
+  game = null; // nothing is drawn or simulated while the zone loads
+  await view.setZone(ZONES[id], data.story);
+  sceneKey = `story:${id}`;
+  const look = data.story.hero || defaultLook();
+  game = createWorld({ zoneId: id, story: data.story, weaponId: look.weapon, heroName: look.name, arrive });
+  view.clearRun(game.hero);
+  Object.assign(storyHud, { hearts: -1, task: '', boss: '', temp: -1, dash: -1 });
+}
+
+// Through a gate into the next kingdom (the progress is saved first).
+async function travel(to, arrive) {
+  saveStory();
+  data.story.zone = to;
+  progress.save(data);
+  try {
+    await openZone(to, arrive);
+    playStory(true);
+  } catch (e) {
+    console.error(e);
+    toast('Не удалось загрузить царство');
+    toMenu();
+  }
+}
+
+// The world keeps its own copy of the story; the save gets the progress (and the current zone).
+function saveStory() {
+  const s = game?.story;
+  if (!s) return;
+  data.story = { ...data.story, zone: game.area.id, flags: [...s.flags], gems: [...s.gems], blessings: [...s.blessings], lines: { ...s.lines }, done: [...s.done], drop: s.drop ?? null };
+  progress.save(data);
+}
+
 function leaveStory() {
+  if (game?.mode === 'story') saveStory();
   storyOn = false;
   game = null;
-  document.body.classList.remove('story', 'talking');
+  document.body.classList.remove('story', 'talking', 'boss', 'dash');
   document.body.classList.toggle('tps', viewMode() === 'tps');
   view.setView(viewMode());
   $('dialog').classList.remove('on');
@@ -614,13 +649,13 @@ async function wearLook(look) {
 function playStory(card = false) {
   view.setMenu(false);
   view.resize();
-  timeFx.length = 0; queued = null; lock = null; cross = null; shot = { kills: 0, points: 0 }; talkPress = false;
+  timeFx.length = 0; queued = null; lock = null; cross = null; shot = { kills: 0, points: 0 }; talkPress = dashPress = false;
   yaw = game.hero.facing - Math.PI; // the camera looks the way the hero faces
   updateHint();
   $('hint').style.opacity = hintShown ? 0 : 1;
   $('pops').innerHTML = '';
   show('hud');
-  if (card) chapterCard(chapterOf(game.story)?.title ?? 'Остров спасён!', taskOf(game).text);
+  if (card) chapterCard(game.area.name, taskOf(game).text);
   input.setEnabled(true);
   last = performance.now();
   mode = 'playing';
@@ -639,6 +674,34 @@ function updateStoryHud() {
     el.textContent = t.text;
     el.classList.remove('new'); void el.offsetWidth; el.classList.add('new');
   }
+  // A boss fight shows the boss's health in place of the task.
+  const boss = g.enemies.find((e) => e.boss && !e.dead);
+  const bossKey = boss ? `${boss.boss.name}:${boss.hp}` : '';
+  if (storyHud.boss !== bossKey) {
+    storyHud.boss = bossKey;
+    document.body.classList.toggle('boss', !!boss);
+    $('bossBar').classList.toggle('on', !!boss);
+    if (boss) { $('bossName').textContent = boss.boss.name; $('bossFill').style.width = `${(100 * boss.hp) / boss.maxHp}%`; }
+  }
+  // Cold or heat: the meter fills away from warm spots; full, it starts to hurt.
+  const c = g.area.climate, temp = c ? Math.round(g.temp * 50) / 50 : 0;
+  if (storyHud.temp !== temp) {
+    storyHud.temp = temp;
+    const el = $('temp');
+    el.classList.toggle('on', temp > 0.02);
+    if (c) {
+      el.classList.toggle('cold', c.kind === 'cold'); el.classList.toggle('heat', c.kind === 'heat');
+      el.classList.toggle('danger', temp >= 0.8);
+      $('tempLabel').textContent = `${c.kind === 'cold' ? '❄️' : '☀️'} ${c.label}${temp >= 0.8 ? ' — погрейся!' : ''}`.replace('погрейся', c.kind === 'cold' ? 'погрейся' : 'в тень');
+      $('tempFill').style.width = `${temp * 100}%`;
+    }
+  }
+  const dash = g.blessed('dash') ? Math.ceil((g.dashCd / DASH.cooldown) * 20) / 20 : -1;
+  if (storyHud.dash !== dash) {
+    storyHud.dash = dash;
+    document.body.classList.toggle('dash', dash >= 0);
+    $('dashBtn').style.setProperty('--cd', Math.max(0, dash));
+  }
   $('talkBtn').classList.toggle('on', !!g.near && !g.talk && !g.over);
   document.body.classList.toggle('talking', !!g.talk);
   pointAt($('taskArrow'), t.x === null || g.talk ? null : view.worldToScreen(t.x, 1, t.z));
@@ -649,11 +712,31 @@ function showLine() {
   if (!t) { $('dialog').classList.remove('on'); return; }
   $('dialogName').textContent = t.name;
   $('dialogText').textContent = t.lines[t.i];
+  const face = $('dialogFace'); // the queen of the sea and of nature have portraits, the others crests
+  face.className = `face${t.portrait ? ' pic' : t.crest ? ' crest' : ''}`;
+  face.style.backgroundImage = t.portrait ? `url(assets/story/${t.portrait}.jpg)` : '';
+  face.style.setProperty('--crest', t.crest?.color || 'transparent');
+  face.textContent = !t.portrait && t.crest ? t.crest.symbol : '';
   $('dialog').classList.add('on');
 }
 
+// The finale: the island is saved; the Crystal Keeper's weapon is the reward.
+const KEEPER_GIFT = 'weapon-crystal';
+function showEnding() {
+  const name = data.story.hero?.name || 'Герой';
+  $('endingText').textContent = `Семь камней снова сияют в Сердце Кристалла. Король скелетов повержен, а Обсидиана вернулась к сёстрам. Королевы благодарят тебя, ${name}: отныне ты — Хранитель Кристалла!`;
+  const fresh = !data.owned.includes(KEEPER_GIFT);
+  if (fresh) { data.owned.push(KEEPER_GIFT); progress.save(data); }
+  $('endingGift').textContent = fresh ? '🎁 Награда: оружие «Кристалл» — надень его в магазине' : '🎁 Оружие «Кристалл» уже у тебя';
+  mode = 'paused';
+  input.setEnabled(false);
+  show('ending');
+}
+$('endingBtn').addEventListener('click', () => { audio.play({ type: 'click' }); resume(); });
+
 function storyEvent(ev) {
   const at = (y = 1.6) => view.worldToScreen(ev.x ?? game.hero.x, y, ev.z ?? game.hero.z);
+  const pop = (text, cls = 'combo', y = 1.6) => { const s = at(y); popup(s.x, s.y, text, cls); };
   switch (ev.type) {
     case 'stepStart':
       if (ev.banner) banner(ev.banner);
@@ -669,12 +752,18 @@ function storyEvent(ev) {
       audio.play({ type: 'waveClear' });
       break;
     }
-    case 'save':
-      data.story = { ...data.story, chapter: game.story.chapter, step: game.story.step, flags: [...game.story.flags], drop: game.story.drop };
-      progress.save(data);
+    case 'save': saveStory(); break;
+    case 'lineDone':
+      saveStory();
+      audio.play({ type: 'waveClear' });
+      slowMo(0.5, 0.5);
+      if (ev.ending) setTimeout(showEnding, 1200);
+      else giftCard({ title: ev.title, gem: getGem(ev.gem), blessing: getBlessing(ev.blessing) });
       break;
-    case 'chapterDone': chapterCard(ev.title, 'Глава пройдена!'); audio.play({ type: 'waveClear' }); break;
-    case 'hit': audio.play({ type: 'hurt' }); freeze(0.06); break;
+    case 'hit':
+      audio.play({ type: 'hurt' }); freeze(0.06);
+      if (ev.why === 'cold' || ev.why === 'heat') pop(ev.why === 'cold' ? 'Холодно!' : 'Жарко!', 'trick', 2);
+      break;
     case 'faint':
       audio.play({ type: 'death' });
       timeFx.length = 0;
@@ -682,21 +771,44 @@ function storyEvent(ev) {
       banner('Без сил…');
       break;
     case 'wake': chapterCard('Ты очнулся у костра', 'Сердца восстановлены'); break;
-    case 'heal': audio.play({ type: 'pickup' }); break;
+    case 'heal': audio.play({ type: 'pickup' }); if (ev.bloom) pop('🌸 +1', 'trick', 2); break;
     case 'target': {
-      const s = at();
-      popup(s.x, s.y, ev.left ? 'Есть!' : 'Все мишени!', 'combo');
-      audio.play({ type: 'kill', combo: 3 - ev.left });
+      pop(ev.left ? 'Есть!' : 'Готово!');
+      audio.play({ type: 'kill', combo: Math.max(1, 3 - (ev.left || 0)) });
       freeze(0.04);
       break;
     }
+    case 'targetHurt': pop('Ещё удар!', 'trick'); break;
+    case 'needLight': pop('Нужен свет ☀️', 'trick'); hintOnce('needLight', 'Эти чаши зажжёт только светящееся оружие — благословение королевы песков'); break;
+    case 'item': pop(ev.left ? `Ещё ${ev.left}` : 'Всё собрано!', 'combo', 1.2); audio.play({ type: 'pickup' }); break;
+    case 'camp': banner(ev.left ? `Лагерь разбит! Осталось: ${ev.left}` : 'Все лагеря разбиты!'); audio.play({ type: 'waveClear' }); break;
     case 'raidWave': banner(`Волна ${ev.wave} из ${ev.of}`); audio.play({ type: 'wave' }); break;
     case 'raidDone': slowMo(0.3, 0.45); break;
-    case 'shard': banner('Осколок кристалла!'); audio.play({ type: 'waveClear' }); slowMo(0.5, 0.4); break;
-    case 'gate': if (!ZONES[ev.to]) toast('Дорога в лес откроется в следующем обновлении'); break;
-    case 'gateClosed': toast('Ворота закрыты — сначала помоги деревне'); break;
+    case 'objectHit': if (ev.hp <= ev.max * 0.35) pop('Защити!', 'trick', 2.4); break;
+    case 'objectLost': banner(`${ev.name} разбит… Ещё раз!`); audio.play({ type: 'death' }); break;
+    case 'bossStart': banner(ev.name); audio.play({ type: 'wave' }); break;
+    case 'bossPhase': banner(ev.text); audio.play({ type: 'wave' }); break;
+    case 'bossStunned': if (game.enemies.find((e) => e.id === ev.id)?.boss.def.vulnerable === 'stunned') hintOnce('stunned', 'Оглушён! Бей сейчас'); break;
+    case 'bossDown': banner(`${ev.name} повержен!`); slowMo(0.3, 0.8); break;
+    case 'block': pop(ev.why === 'stun' ? 'Не пробить! Жди оглушения' : 'Щит! Бей сбоку или сзади', 'trick'); break;
+    case 'bank': pop('Рикошет ×2!', 'combo c3'); break;
+    case 'gustWarn': pop({ wave: '🌊 Волна!', sand: '🌪️ Буря!' }[ev.kind] || '💨 Ветер!', 'trick', 2.4); break;
+    case 'gate':
+      if (!ZONES[ev.to]) break;
+      mode = 'travel'; // stops the simulation now; the zone loads after this step
+      input.setEnabled(false);
+      setTimeout(() => travel(ev.to, ev.arrive));
+      break;
+    case 'gateClosed': toast(ev.text || 'Ворота закрыты — сначала помоги деревне'); break;
   }
 }
+$('dashBtn').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (mode !== 'playing') return;
+  dashPress = true;
+  const b = $('dashBtn');
+  b.classList.add('go'); setTimeout(() => b.classList.remove('go'), 120);
+});
 
 // The creator: the hero turns on the spot and wears every choice at once.
 function openCreator(first) {
@@ -791,8 +903,8 @@ landscape.addEventListener('change', (e) => { if (e.matches) pause(); });
 
 view.resize();
 requestAnimationFrame(frame);
-// Read-only handle for automated browser checks.
-Object.defineProperty(window, '__ricochet', { value: { get game() { return game; }, get yaw() { return yaw; } } });
+// Handle for automated browser checks (they may also turn the camera).
+Object.defineProperty(window, '__ricochet', { value: { get game() { return game; }, get yaw() { return yaw; }, set yaw(v) { yaw = v; } } });
 toMenu().catch((e) => {
   console.error(e);
   $('loadingText').textContent = 'Не удалось загрузить игру. Обновите страницу.';
