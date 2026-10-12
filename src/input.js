@@ -14,12 +14,13 @@ const EDGE_PX = 28;   // a turning finger held this close to a screen edge keeps
 // Turning gets faster with finger speed: precise when slow, a quick flick turns around.
 const LOOK_SLOW = 0.005, LOOK_FAST = 0.011; // rad per px at ≤ 400 px/s and ≥ 1600 px/s
 
-export function createInput(el, { stickCenter, fireCenter, mode }) {
+export function createInput(el, { stickCenter, fireCenter, recallCenter = () => null, mode }) {
   const touches = new Map(); // free touches: { x, y, x0, t0, tm }
   let stick = null;          // { id, x0, y0, x, y } — x0/y0 is the fixed center
   let fire = null;           // { id, t0, tm, x, x0, y0, cancel } — third-person fire button
   const fires = [];
   let look = 0;              // camera turn since the last takeLook(), radians
+  let recallId = null, recalls = 0; // top-down ↩ button
   let enabled = false;
 
   const near = (c, e, r) => c && Math.hypot(e.clientX - c.x, e.clientY - c.y) < r;
@@ -38,6 +39,7 @@ export function createInput(el, { stickCenter, fireCenter, mode }) {
       stick = { id: e.pointerId, x0: c.x, y0: c.y, x: e.clientX, y: e.clientY };
       return;
     }
+    if (mode() !== 'tps' && near(recallCenter(), e, 56)) { recallId = e.pointerId; return; }
     if (mode() === 'tps' && !fire && near(fireCenter(), e, FIRE_GRAB)) {
       fire = { id: e.pointerId, t0: now, tm: now, x: e.clientX, x0: e.clientX, y0: e.clientY, cancel: false };
       return;
@@ -60,6 +62,7 @@ export function createInput(el, { stickCenter, fireCenter, mode }) {
   };
   const up = (e) => {
     if (stick && stick.id === e.pointerId) { stick = null; return; }
+    if (recallId === e.pointerId) { recallId = null; recalls++; return; }
     if (fire && fire.id === e.pointerId) { if (!fire.cancel) fires.push({ forward: true }); fire = null; return; }
     const t = touches.get(e.pointerId);
     if (!t) return;
@@ -81,7 +84,7 @@ export function createInput(el, { stickCenter, fireCenter, mode }) {
     // keepStick: a finger still on the stick keeps steering after the perk screen closes.
     setEnabled(on, { keepStick = false } = {}) {
       enabled = on;
-      if (!on) { touches.clear(); fire = null; fires.length = 0; look = 0; if (!keepStick) stick = null; }
+      if (!on) { touches.clear(); fire = null; fires.length = 0; look = 0; recallId = null; recalls = 0; if (!keepStick) stick = null; }
     },
     // Stick in screen terms: x right, z down, length 0..1.
     move() {
@@ -92,6 +95,7 @@ export function createInput(el, { stickCenter, fireCenter, mode }) {
       return { x: dx * k, z: dz * k };
     },
     takeFire: () => fires.shift() || null,
+    takeRecall() { const r = recalls > 0; recalls = 0; return r; },
     // Camera turn since the last call, in radians (third person).
     takeLook() { const d = look; look = 0; return d; },
     // −1 / 1 while a turning finger that has moved rests at the left / right screen edge.

@@ -10,6 +10,7 @@ import { HEROES, getHero } from './heroes.js';
 import { createRng, todayKey } from './rng.js';
 import { challengeFromHash, challengeUrl } from './share.js';
 import * as progress from './progress.js';
+import * as shop from './shop.js';
 import { $, show, toast, renderHero, renderLocations, popup, banner, aimAt } from './ui.js';
 
 const STEP = 1 / 60;
@@ -21,10 +22,11 @@ const centerOf = (id) => () => {
   return r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
 };
 const viewMode = () => (data.settings.view === 'top' ? 'top' : 'tps'); // third person by default
-const input = createInput(canvas, { stickCenter: centerOf('stick'), fireCenter: centerOf('fireBtn'), mode: viewMode });
+const input = createInput(canvas, { stickCenter: centerOf('stick'), fireCenter: centerOf('fireBtn'), recallCenter: centerOf('recallBtn'), mode: viewMode });
 document.body.classList.toggle('stick-right', !!data.settings.stickRight);
 document.body.classList.toggle('tps', viewMode() === 'tps');
 const view = createRenderer(canvas, { quality: data.settings.quality });
+view.presetGear(data.look); // cosmetics bought in the shop
 view.setView(viewMode());
 let yaw = 0; // third-person camera heading (0 looks toward −z, where most enemies come from)
 const AIM_DIST = 8;
@@ -104,6 +106,7 @@ function refreshMenu() {
   $('menuHero').textContent = h.name;
   $('menuLocation').textContent = l.name;
   $('menuBest').textContent = data.best[l.id] || 0;
+  $('menuCoins').textContent = data.coins;
   const today = todayKey();
   const d = daily(today);
   $('dailySub').textContent = `${getLocation(d.locationId).name} · ${getHero(d.heroId).name}${data.daily[today] ? ` · 🏆 ${data.daily[today]}` : ''}`;
@@ -118,6 +121,7 @@ async function toMenu() {
   mode = 'menu';
   input.setEnabled(false);
   await buildScene(data.location, data.hero);
+  await view.setGear(data.look, false); // back from the shop: take off whatever was only tried on
   view.clearRun();
   view.setMenu('menu');
   refreshMenu();
@@ -174,7 +178,12 @@ function finish() {
   const r = result(game);
   const dailyKey = run.kind === 'free' ? null : run.date;
   const rec = progress.record(data, r, dailyKey);
+  const firstDaily = run.kind === 'daily' && data.dailyBonus !== run.date;
+  if (firstDaily) data.dailyBonus = run.date;
+  const coins = shop.coinsFor(r.score, { record: rec.newBest, daily: firstDaily });
+  data.coins += coins.total;
   progress.save(data);
+  showCoins(coins);
   $('overScore').textContent = r.score;
   $('overCombo').textContent = `×${r.combo}`;
   $('overWave').textContent = r.wave;
@@ -187,6 +196,19 @@ function finish() {
     vs.classList.add('on');
   } else vs.classList.remove('on');
   show('over');
+}
+
+// End of a run: the coins count up, with badges for the bonuses.
+function showCoins(c) {
+  const el = $('overCoins');
+  if (!c.total) { el.innerHTML = ''; return; }
+  const badges = `${c.record ? '<span class="badge">рекорд ×2</span>' : ''}${c.daily ? `<span class="badge">вызов дня +${shop.DAILY_BONUS}</span>` : ''}`;
+  const paint = (n) => { el.innerHTML = `+${n} 🪙${badges}`; };
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { paint(c.total); return; }
+  const t0 = performance.now();
+  const tick = (t) => { const k = Math.min(1, (t - t0) / 700); paint(Math.round(c.total * k * (2 - k))); if (k < 1) requestAnimationFrame(tick); };
+  paint(0);
+  requestAnimationFrame(tick);
 }
 
 async function share() {
@@ -210,6 +232,7 @@ function handle(ev) {
     const s = view.worldToScreen(ev.x, 1.2, ev.z);
     const cls = ev.combo >= 5 ? 'combo c5' : ev.combo >= 3 ? 'combo c3' : ev.combo > 1 ? 'combo' : '';
     popup(s.x, s.y, ev.combo > 1 ? `+${ev.points} ×${ev.combo}` : `+${ev.points}`, cls);
+    if (ev.tricks?.length) popup(s.x, s.y - 34, ev.tricks.join(' · '), 'trick');
     killSound = Math.max(killSound, ev.combo);
     shot.kills++; shot.points += ev.points;
     const now = performance.now();
@@ -221,6 +244,7 @@ function handle(ev) {
   } else if (ev.type === 'wave') {
     $('wave').textContent = `Волна ${ev.wave}`;
     banner(`Волна ${ev.wave}`);
+    hintOnce('zone', 'Убивай в золотом круге — очки ×3');
   } else if (ev.type === 'waveClear') {
     banner(`+${ev.bonus}`);
     slowMo(0.3, 0.45); // the last kill of a wave plays in slow motion
@@ -287,7 +311,12 @@ function updateHud() {
   el.classList.toggle('active', !!st);
   $('fireBtn').classList.toggle('active', input.firing());
   $('fireBtn').classList.toggle('cancel', input.cancelling());
-  $('fireBtn').classList.toggle('empty', game.projectile.state !== 'held');
+  // ↩: the fire button in third person, its own button in the top-down view.
+  const ready = recallReady(), tps = viewMode() === 'tps';
+  $('fireBtn').classList.toggle('recall', ready && tps);
+  $('recallBtn').classList.toggle('on', ready && !tps);
+  if (ready) hintOnce('recall', tps ? 'Нажми ↩ — оружие само вернётся в руку' : 'Нажми ↩ внизу — оружие само вернётся в руку');
+  $('fireBtn').classList.toggle('empty', game.projectile.state !== 'held' && !ready);
   el.firstElementChild.style.transform = `translate(${kx}px, ${ky}px)`;
 }
 
@@ -317,6 +346,16 @@ function showPerks(options) {
 
 function renderPerkRow() {
   $('perkRow').innerHTML = PERKS.filter((p) => game?.mods[p.id]).map((p) => `<span>${p.icon}${game.mods[p.id] > 1 ? game.mods[p.id] : ''}</span>`).join('');
+}
+
+const recallReady = () => game.projectile.state === 'dropped' && game.recallT === 0 && !game.over;
+// One-time tips for new mechanics (remembered in the save).
+function hintOnce(key, text) {
+  data.settings.hints ||= {};
+  if (data.settings.hints[key]) return;
+  data.settings.hints[key] = true;
+  progress.save(data);
+  toast(text);
 }
 
 // Third person: the crosshair sits where a shot straight ahead is aimed, or on the locked enemy.
@@ -349,7 +388,10 @@ function frame(now) {
     while (acc >= STEP) {
       acc -= STEP;
       const tap = input.takeFire();
-      if (tap) queued = { tap, t: FIRE_BUFFER };
+      let recallNow = input.takeRecall();
+      // In third person the fire button doubles as ↩ while the projectile lies on the ground.
+      if (tap?.forward && recallReady()) recallNow = true;
+      else if (tap) queued = { tap, t: FIRE_BUFFER };
       let fire = null;
       if (queued && game.projectile.state === 'held') {
         const q = queued.tap;
@@ -358,7 +400,7 @@ function frame(now) {
         else { fire = view.screenToGround(q.x, q.y); aimAt(q.x, q.y); }
       } else if (queued && (queued.t -= STEP) <= 0) queued = null;
       const wasFlying = game.projectile.state === 'flying';
-      step(game, STEP, { move: moveVector(), fire });
+      step(game, STEP, { move: moveVector(), fire, recall: recallNow });
       for (const ev of game.events) handle(ev);
       game.events.length = 0;
       if (killSound) { audio.play({ type: 'kill', combo: killSound }); killSound = 0; }
@@ -388,6 +430,7 @@ for (const b of document.querySelectorAll('[data-go]')) {
     audio.unlock(); audio.play({ type: 'click' });
     const to = b.dataset.go;
     if (to === 'heroes') { openHeroes(); return; }
+    if (to === 'shop') { openShop(); return; }
     if (to === 'locations') renderLocations(data, pickLocation);
     if (to === 'menu') { toMenu(); return; }
     show(to);
@@ -415,6 +458,93 @@ $('heroPick').addEventListener('click', () => {
   toast(`${h.name} готов к бою`);
   toMenu();
 });
+// ---------- shop ----------
+// Tabs: today's deals or one category. Tapping an item tries it on the hero (trails circle the hero);
+// the big button buys (and puts on) or puts on an owned item. Leaving restores what is worn.
+let shopTab = 'deals';
+let shopSel = null; // { cat, id }; id null is the free default look
+function openShop() {
+  shopTab = 'deals';
+  shopSel = null;
+  view.setMenu('shop');
+  renderShop();
+  show('shop');
+}
+function shopItems() {
+  if (shopTab === 'deals') return shop.dealsFor(todayKey()).map((id) => ({ cat: shop.getItem(id).cat, id }));
+  return [{ cat: shopTab, id: null }, ...shop.CATALOG.filter((i) => i.cat === shopTab).map((i) => ({ cat: i.cat, id: i.id }))];
+}
+function renderShop() {
+  const today = todayKey(), deals = shop.dealsFor(today), off = `−${Math.round(shop.DEAL_OFF * 100)}%`;
+  $('shopCoins').textContent = data.coins;
+  for (const t of document.querySelectorAll('#shop .tab')) {
+    const on = t.dataset.tab === shopTab;
+    t.classList.toggle('on', on);
+    t.setAttribute('aria-selected', String(on));
+  }
+  const grid = $('shopGrid');
+  grid.innerHTML = '';
+  for (const s of shopItems()) {
+    const it = shop.getItem(s.id), owned = shop.owns(data, s.id), worn = data.look[s.cat] === s.id;
+    const deal = !!it && deals.includes(s.id), price = it ? shop.priceOf(s.id, today) : 0;
+    const b = document.createElement('button');
+    b.className = `shop-item${owned ? ' owned' : ''}${shopSel?.cat === s.cat && shopSel?.id === s.id ? ' sel' : ''}`;
+    b.innerHTML = `<span class="sw" style="background:${it ? it.swatch : 'rgba(255,255,255,.15)'}"></span><b>${it ? it.name : 'Обычный'}</b>`
+      + `<small>${owned ? (worn ? 'надето' : 'есть') : `${deal ? `<s>${it.price}</s>` : ''}🪙 ${price}`}</small>`
+      + `${worn ? '<span class="tick">✓</span>' : ''}${deal && !owned ? `<span class="tag">${off}</span>` : ''}`;
+    b.setAttribute('aria-label', `${it ? it.name : 'Обычный'}, ${owned ? (worn ? 'надето' : 'куплено') : `${price} монет`}`);
+    b.addEventListener('click', () => {
+      shopSel = s;
+      audio.play({ type: 'click' });
+      view.setGear({ ...data.look, [s.cat]: s.id }, s.cat === 'trail'); // try it on
+      renderShop();
+    });
+    grid.append(b);
+  }
+  const btn = $('shopAction'), info = $('shopInfo');
+  if (!shopSel) {
+    btn.textContent = 'Выбери вещь';
+    btn.disabled = true;
+    info.textContent = shopTab === 'deals' ? `Скидка ${Math.round(shop.DEAL_OFF * 100)}% — до полуночи` : 'Нажми на вещь, чтобы примерить';
+    return;
+  }
+  const it = shop.getItem(shopSel.id);
+  info.textContent = it ? it.blurb : 'Как было с самого начала';
+  if (!shop.owns(data, shopSel.id)) {
+    const price = shop.priceOf(shopSel.id, today);
+    btn.disabled = data.coins < price;
+    btn.textContent = data.coins < price ? `Не хватает ${price - data.coins} 🪙` : `Купить за ${price} 🪙`;
+  } else if (data.look[shopSel.cat] === shopSel.id) {
+    btn.disabled = true;
+    btn.textContent = 'Надето ✓';
+  } else {
+    btn.disabled = false;
+    btn.textContent = 'Надеть';
+  }
+}
+$('shopAction').addEventListener('click', () => {
+  if (!shopSel) return;
+  if (!shop.owns(data, shopSel.id)) {
+    if (!shop.buy(data, shopSel.id, todayKey()).ok) return;
+    audio.play({ type: 'waveClear' });
+    toast(`Куплено: ${shop.getItem(shopSel.id).name}`);
+  } else {
+    shop.equip(data, shopSel.cat, shopSel.id);
+    audio.play({ type: 'catch' });
+  }
+  progress.save(data);
+  renderShop();
+});
+for (const t of document.querySelectorAll('#shop .tab')) {
+  t.addEventListener('click', () => {
+    shopTab = t.dataset.tab;
+    shopSel = null;
+    audio.play({ type: 'click' });
+    view.setGear(data.look, false);
+    renderShop();
+  });
+}
+
 function pickLocation(id) { data.location = id; progress.save(data); renderLocations(data, pickLocation); toast(`Локация: ${getLocation(id).name}`); }
 
 $('playBtn').addEventListener('click', () => start('free'));

@@ -1,5 +1,6 @@
 import { ARENA, getLocation, layoutFor } from './locations.js';
-import { getWeapon, launch, stepProjectile, onEnemyHit, PROJECTILE_R } from './weapons.js';
+import { getWeapon, launch, stepProjectile, onEnemyHit, recall, PROJECTILE_R } from './weapons.js';
+import { createRng } from './rng.js';
 import { ENEMY_TYPES, planWave, speedFactor } from './waves.js';
 import { blankMods, offerPerks, applyPerk } from './perks.js';
 import { solidContact } from './solid.js';
@@ -7,6 +8,9 @@ import { solidContact } from './solid.js';
 const HERO_SPEED = 5.2;
 const HERO_R = 0.4;
 const WAVE_BREAK = 1.6;
+const RECALL_COOLDOWN = 6; // seconds between two recalls (↩)
+const ZONE_R = 2;          // golden zone radius; kills inside it score ×3
+const FAR_SHOT = 12;       // a kill this far from the hero is a long throw
 const PICKUP_R = 1.1;  // hand reach for a dropped projectile (× long-reach perk)
 const VACUUM_R = 1.8;  // inside this the projectile flies to the hand by itself
 
@@ -19,6 +23,7 @@ export function createGame({ seed, locationId, weaponId, heroId = null }) {
     projectile: { state: 'held', x: 0, z: 3, vx: 0, vz: 0, hits: new Set(), events: [] },
     enemies: [], nextId: 1,
     wave: 0, waveT: 0, queue: [], breakT: 0.6,
+    zone: null, recallT: 0, // golden zone { x, z, r } (moves every wave); recall cooldown
     score: 0, bestCombo: 0, shotMult: 1, pendingMult: 1,
     mods: blankMods(), choosing: null, // perk ids offered after a cleared wave; the game waits for a pick
     time: 0, over: false, events: [],
@@ -28,10 +33,25 @@ export function createGame({ seed, locationId, weaponId, heroId = null }) {
 
 const emit = (g, type, data = {}) => g.events.push({ type, ...data });
 
+// The golden zone moves to a new free spot every wave (deterministic from the seed and the wave).
+function placeZone(g) {
+  const rng = createRng(`${g.seed}:zone:${g.wave}`);
+  const { W, D } = g.arena;
+  for (let i = 0; i < 60; i++) {
+    const x = rng.range(-W + ZONE_R + 0.5, W - ZONE_R - 0.5), z = rng.range(-D + ZONE_R + 1, D - ZONE_R - 1);
+    if (Math.hypot(x - g.hero.x, z - g.hero.z) < 3.5) continue; // not right under the hero
+    if (g.solids.some((o) => solidContact(o, x, z, 0.8))) continue;
+    g.zone = { x, z, r: ZONE_R };
+    return;
+  }
+  g.zone = null;
+}
+
 function startWave(g) {
   g.wave++;
   g.waveT = 0;
   g.queue = planWave(g.seed, g.wave);
+  placeZone(g);
   emit(g, 'wave', { wave: g.wave });
 }
 
@@ -114,10 +134,18 @@ function clearSpot(g, pos, r, alongX) {
 function killEnemy(g, e, p) {
   e.dead = true;
   p.kills = (p.kills || 0) + 1;
-  const points = 10 * p.kills * g.shotMult;
+  // Trick shots: after bounces, through a portal, from far away, inside the golden zone.
+  const tricks = [];
+  let bonus = 0, mult = g.shotMult;
+  const banks = Math.min(3, p.banks || 0);
+  if (banks) { tricks.push(banks > 1 ? `Рикошет ×${banks}` : 'Рикошет'); bonus += 10 * banks; }
+  if (p.portal) { tricks.push('Через портал'); bonus += 30; }
+  if (Math.hypot(e.x - g.hero.x, e.z - g.hero.z) >= FAR_SHOT) { tricks.push('Дальний бросок'); bonus += 20; }
+  if (g.zone && Math.hypot(e.x - g.zone.x, e.z - g.zone.z) < g.zone.r) { tricks.push('Золото ×3'); mult *= 3; }
+  const points = (10 * p.kills + bonus) * mult;
   g.score += points;
   g.bestCombo = Math.max(g.bestCombo, p.kills);
-  emit(g, 'kill', { x: e.x, z: e.z, points, combo: p.kills, id: e.id, vx: p.vx, vz: p.vz, px: p.x, pz: p.z }); // render throws the body along the hit
+  emit(g, 'kill', { x: e.x, z: e.z, points, combo: p.kills, id: e.id, vx: p.vx, vz: p.vz, px: p.x, pz: p.z, tricks }); // render throws the body along the hit
   if (e.type === 'splitter') {
     for (const side of [-1, 1]) {
       const child = addEnemy(g, 'runner', e.x + side * 0.5, e.z, ENEMY_TYPES.runner.model[0]);
@@ -135,7 +163,7 @@ function damage(g, e, p) {
   else emit(g, 'hurt', { x: e.x, z: e.z, id: e.id });
 }
 
-// input: { move: {x, z} with length 0..1, fire: {x, z} | null }
+// input: { move: {x, z} with length 0..1, fire: {x, z} | null, recall: bool (the ↩ button) }
 export function step(g, dt, input = {}) {
   if (g.over || g.choosing) return;
   g.time += dt;
@@ -166,10 +194,21 @@ export function step(g, dt, input = {}) {
   const proj = g.projectile;
   if (proj.state === 'held') { proj.x = h.x; proj.z = h.z; }
 
+  // Recall (↩): a dropped projectile flies back to the hand.
+  g.recallT = Math.max(0, g.recallT - dt);
+  if (input.recall && proj.state === 'dropped' && g.recallT === 0) {
+    recall(proj);
+    g.recallT = RECALL_COOLDOWN;
+    emit(g, 'recall', { x: proj.x, z: proj.z });
+  }
+
   const world = { arena: g.arena, solids: g.solids, enemies: g.enemies, hero: h, rule };
   const wasFlying = proj.state === 'flying';
   stepProjectile(proj, dt, world);
-  for (const ev of proj.events) emit(g, ev, { x: proj.x, z: proj.z });
+  for (const ev of proj.events) {
+    if (ev === 'bounce') proj.banks = (proj.banks || 0) + 1; // for the trick-shot bonus
+    emit(g, ev, { x: proj.x, z: proj.z });
+  }
   proj.events.length = 0;
 
   // Projectile vs enemies.
@@ -204,7 +243,7 @@ export function step(g, dt, input = {}) {
   }
   // Catch in flight (×2 next shot) or pick up from the floor.
   const reach = 1 + 0.5 * g.mods.reach;
-  if (proj.state === 'flying' && g.weapon.catchable && proj.t > 0.25 && dHero < 0.75 * reach) {
+  if (proj.state === 'flying' && proj.weapon !== 'recall' && g.weapon.catchable && proj.t > 0.25 && dHero < 0.75 * reach) {
     proj.state = 'held';
     g.pendingMult = 2;
     emit(g, 'catch', { x: h.x, z: h.z });

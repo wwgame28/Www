@@ -76,6 +76,25 @@
   .item { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 12px; padding: 12px; border-radius: var(--radius); background: var(--panel); border: 2px solid transparent; transition: transform .08s, border-color .15s; }
   .item:active { transform: scale(.98); }
   .item.sel { border-color: var(--gold); }
+  /* shop */
+  .chip.coins { color: var(--gold); }
+  .shop-card { display: flex; flex-direction: column; gap: 10px; }
+  .tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .tab { appearance: none; border: 0; border-radius: 12px; min-height: 44px; font: inherit; font-weight: 900; font-size: 14px; color: #fff; background: rgba(255,255,255,.08); touch-action: manipulation; }
+  .tab.on { background: var(--gold); color: var(--ink); }
+  .shop-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .shop-item { appearance: none; position: relative; border: 2px solid transparent; border-radius: 14px; background: rgba(255,255,255,.06); color: #fff; font: inherit; padding: 8px 4px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 92px; touch-action: manipulation; }
+  .shop-item.sel { border-color: var(--gold); background: rgba(255,211,77,.12); }
+  .shop-item .sw { width: 40px; height: 40px; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(255,255,255,.35), 0 3px 8px rgba(0,0,0,.35); }
+  .shop-item b { font-size: 14px; line-height: 1.1; }
+  .shop-item small { font-size: 12px; font-weight: 800; color: var(--gold); }
+  .shop-item small s { color: rgba(255,255,255,.55); font-weight: 700; margin-right: 4px; }
+  .shop-item.owned small { color: rgba(255,255,255,.75); }
+  .shop-item .tick { position: absolute; top: 4px; right: 6px; font-size: 14px; color: var(--gold); }
+  .shop-item .tag { position: absolute; top: 4px; left: 6px; font-size: 11px; font-weight: 900; color: #fff; background: var(--coral); border-radius: 8px; padding: 1px 5px; }
+  .shop-info { min-height: 18px; margin: 0; text-align: center; }
+  .coins-line { margin: 8px 0 0; text-align: center; font-weight: 900; font-size: 22px; color: var(--gold); min-height: 26px; }
+  .coins-line .badge { display: inline-block; margin-left: 6px; font-size: 13px; color: var(--ink); background: var(--gold); border-radius: 8px; padding: 2px 6px; vertical-align: middle; }
   .item.locked { opacity: .55; }
   .item .pic { width: 64px; height: 64px; border-radius: 14px; background: rgba(255,255,255,.08); display: grid; place-items: center; overflow: hidden; }
   .item .pic img { width: 56px; height: 56px; image-rendering: pixelated; }
@@ -105,6 +124,11 @@
   #fireBtn { position: absolute; right: calc(28px + var(--safe-r)); bottom: calc(46px + var(--safe-b)); width: 112px; height: 112px; border-radius: 50%; display: none; place-items: center; font-size: 40px; color: var(--ink); background: radial-gradient(circle at 50% 40%, #ffe27a, var(--gold) 60%, var(--gold-dark)); box-shadow: inset 0 -6px 0 rgba(0,0,0,.2), 0 6px 18px rgba(0,0,0,.35); pointer-events: none; opacity: .9; transition: transform .08s, opacity .15s; }
   #fireBtn.active { transform: scale(.92); opacity: 1; }
   #fireBtn.empty { filter: grayscale(.9) brightness(.8); }
+  #fireBtn.recall { background: radial-gradient(circle at 50% 40%, #b8f6ff, var(--sky) 60%, var(--sky-dark)); font-size: 0; }
+  #fireBtn.recall::before { content: '↩'; font-size: 46px; color: var(--ink); }
+  #recallBtn { position: absolute; right: calc(24px + var(--safe-r)); bottom: calc(120px + var(--safe-b)); width: 76px; height: 76px; border-radius: 50%; display: none; place-items: center; font-size: 38px; font-weight: 900; color: var(--ink); background: radial-gradient(circle at 50% 40%, #b8f6ff, var(--sky) 60%, var(--sky-dark)); box-shadow: inset 0 -5px 0 rgba(0,0,0,.2), 0 6px 18px rgba(0,0,0,.35); pointer-events: none; }
+  #recallBtn.on { display: grid; }
+  body.stick-right #recallBtn { right: auto; left: calc(24px + var(--safe-l)); }
   #fireBtn.cancel { filter: grayscale(1); }
   #fireBtn.cancel::after { content: '✕'; position: absolute; inset: 0; display: grid; place-items: center; border-radius: 50%; background: rgba(20,24,43,.6); color: var(--coral); font-size: 46px; }
   body.tps #fireBtn { display: grid; }
@@ -126,6 +150,7 @@
   .pop.combo { color: var(--gold); font-size: 28px; }
   .pop.c3 { color: #ff9a3a; font-size: 34px; }
   .pop.c5 { color: #ff5ad1; font-size: 40px; }
+  .pop.trick { color: #7ff3ff; font-size: 18px; }
   .pop.total { font-size: 22px; background: rgba(20,24,43,.78); padding: 6px 14px; border-radius: 14px; animation-duration: 1.2s; }
 
   #perkRow { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; max-width: 220px; }
@@ -219,6 +244,7 @@
       <span class="chip">🛡 <span id="menuHero"></span></span>
       <span class="chip">📍 <span id="menuLocation"></span></span>
       <span class="chip">🏆 <span id="menuBest">0</span></span>
+      <span class="chip coins">🪙 <span id="menuCoins">0</span></span>
     </div>
   </div>
   <div id="challenge" class="card"><p id="challengeText"></p><button id="challengeBtn" class="btn coral" style="width:100%;margin-top:10px">Принять вызов</button></div>
@@ -229,6 +255,23 @@
       <button class="btn ghost" data-go="heroes">🧙 Герои</button>
       <button class="btn ghost" data-go="locations">🗺 Локации</button>
     </div>
+    <button class="btn ghost" data-go="shop">🛒 Магазин</button>
+  </div>
+</section>
+
+<section id="shop" class="screen">
+  <div class="topbar"><button class="btn icon ghost" data-go="menu" aria-label="Назад">‹</button><h2>Магазин</h2><span class="chip coins">🪙 <span id="shopCoins">0</span></span></div>
+  <div class="spacer"></div>
+  <div class="card shop-card">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="deals">Товар дня</button>
+      <button class="tab" role="tab" data-tab="skin">Герой</button>
+      <button class="tab" role="tab" data-tab="weapon">Оружие</button>
+      <button class="tab" role="tab" data-tab="trail">Следы</button>
+    </div>
+    <div id="shopGrid" class="shop-grid"></div>
+    <p id="shopInfo" class="note shop-info"></p>
+    <button id="shopAction" class="btn big" style="width:100%"></button>
   </div>
 </section>
 
@@ -277,6 +320,7 @@
   </div>
   <div id="stick"><i></i></div>
   <div id="fireBtn" aria-hidden="true">✦</div>
+  <div id="recallBtn" aria-hidden="true">↩</div>
   <div id="crosshair"></div>
   <div id="aim"></div>
   <div id="arrow"></div>
@@ -310,6 +354,7 @@
       <div class="stat"><b id="overCombo">0</b><span>лучшее комбо</span></div>
       <div class="stat"><b id="overWave">0</b><span>волна</span></div>
     </div>
+    <p id="overCoins" class="coins-line" aria-live="polite"></p>
     <p id="vs"></p>
     <div class="stack">
       <button id="shareBtn" class="btn coral">Бросить вызов другу</button>
