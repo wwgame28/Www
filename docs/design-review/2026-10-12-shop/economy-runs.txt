@@ -1,0 +1,27 @@
+k=0 all          score p10/med/p90   150/  800/  3572  wave med    4  coins/run med   80 mean  151  min/run 2.4  coins/min 64
+k=0 no stone     score p10/med/p90   130/  735/  2617  wave med    4  coins/run med   74 mean  107  min/run 2.2  coins/min 48
+  barbarian        score p10/med/p90    88/  685/  1736  wave med    4  coins/run med   69 mean   81  min/run 2.4  coins/min 34
+  stonemage        score p10/med/p90   442/ 3805/  9160  wave med    8  coins/run med  381 mean  414  min/run 3.2  coins/min 129
+  knight           score p10/med/p90   210/  690/  2902  wave med    4  coins/run med   69 mean  111  min/run 2.3  coins/min 48
+  rogue            score p10/med/p90    10/  390/  1245  wave med    3  coins/run med   39 mean   56  min/run 1.9  coins/min 29
+  ranger           score p10/med/p90   370/  995/  2782  wave med    4  coins/run med  100 mean  150  min/run 2.3  coins/min 66
+  stormmage        score p10/med/p90   238/  870/  3229  wave med    4  coins/run med   87 mean  134  min/run 2.1  coins/min 64
+  firemage         score p10/med/p90   159/  740/  2617  wave med    4  coins/run med   74 mean  110  min/run 2.3  coins/min 48
+k=0.5 all        score p10/med/p90   390/ 1695/  5611  wave med    6  coins/run med  170 mean  244  min/run 3.4  coins/min 71
+k=0.5 no stone   score p10/med/p90   383/ 1345/  3827  wave med    5  coins/run med  135 mean  182  min/run 3.2  coins/min 57
+  barbarian        score p10/med/p90   216/ 1015/  3053  wave med  4.5  coins/run med  102 mean  143  min/run 2.9  coins/min 49
+  stonemage        score p10/med/p90   733/ 6245/ 30502  wave med   10  coins/run med  625 mean  613  min/run 4.7  coins/min 130
+  knight           score p10/med/p90   673/ 2195/  3987  wave med    7  coins/run med  220 mean  237  min/run 3.9  coins/min 60
+  rogue            score p10/med/p90   340/  780/  2464  wave med    4  coins/run med   78 mean  120  min/run 3.0  coins/min 40
+  ranger           score p10/med/p90   436/ 1655/  4455  wave med  5.5  coins/run med  166 mean  204  min/run 2.8  coins/min 73
+  stormmage        score p10/med/p90   416/ 1770/  3790  wave med    6  coins/run med  177 mean  195  min/run 2.6  coins/min 76
+  firemage         score p10/med/p90   348/ 1740/  3841  wave med    6  coins/run med  174 mean  195  min/run 4.0  coins/min 48
+k=1 all          score p10/med/p90   430/ 2450/  8258  wave med    7  coins/run med  245 mean  317  min/run 4.0  coins/min 79
+k=1 no stone     score p10/med/p90   400/ 2220/  4530  wave med    7  coins/run med  222 mean  239  min/run 3.6  coins/min 67
+  barbarian        score p10/med/p90   373/ 1330/  3814  wave med    5  coins/run med  133 mean  186  min/run 3.0  coins/min 61
+  stonemage        score p10/med/p90  1796/15350/ 56127  wave med   14  coins/run med 1000 mean  780  min/run 6.6  coins/min 119
+  knight           score p10/med/p90  1009/ 2890/  6196  wave med    8  coins/run med  289 mean  346  min/run 4.5  coins/min 78
+  rogue            score p10/med/p90   211/ 1130/  3271  wave med    5  coins/run med  113 mean  146  min/run 3.1  coins/min 46
+  ranger           score p10/med/p90   436/ 2380/  4469  wave med    7  coins/run med  238 mean  235  min/run 3.2  coins/min 74
+  stormmage        score p10/med/p90   470/ 2300/  4495  wave med    7  coins/run med  230 mean  250  min/run 3.0  coins/min 83
+  firemage         score p10/med/p90   725/ 2545/  4492  wave med    7  coins/run med  255 mean  274  min/run 4.6  coins/min 60
