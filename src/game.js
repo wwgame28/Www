@@ -4,6 +4,7 @@ import { createRng } from './rng.js';
 import { ENEMY_TYPES, planWave, speedFactor } from './waves.js';
 import { blankMods, offerPerks, applyPerk } from './perks.js';
 import { solidContact } from './solid.js';
+import { getHero } from './heroes.js';
 
 const HERO_SPEED = 5.2;
 const HERO_R = 0.4;
@@ -25,7 +26,7 @@ export function createGame({ seed, locationId, weaponId, heroId = null }) {
     wave: 0, waveT: 0, queue: [], breakT: 0.6,
     zone: null, recallT: 0, // golden zone { x, z, r } (moves every wave); recall cooldown
     score: 0, bestCombo: 0, shotMult: 1, pendingMult: 1,
-    mods: blankMods(), choosing: null, // perk ids offered after a cleared wave; the game waits for a pick
+    mods: { ...blankMods(), ...(heroId ? getHero(heroId).trait : null) }, choosing: null, // perk levels (the hero's trait first); offered ids after a cleared wave
     time: 0, over: false, events: [],
   };
   return g;
