@@ -108,8 +108,9 @@ const STEPS = {
   recall(p, dt, world) {
     const dx = world.hero.x - p.x, dz = world.hero.z - p.z, d = Math.hypot(dx, dz);
     if (d < 0.6) { p.state = 'held'; p.events.push('return'); return; }
-    p.vx = (dx / d) * RECALL_SPEED; p.vz = (dz / d) * RECALL_SPEED;
-    const s = Math.min(d, RECALL_SPEED * dt);
+    const v = p.recallSpeed || RECALL_SPEED;
+    p.vx = (dx / d) * v; p.vz = (dz / d) * v;
+    const s = Math.min(d, v * dt);
     p.x += (dx / d) * s; p.z += (dz / d) * s;
   },
   ricochet(p, dt, world) {
