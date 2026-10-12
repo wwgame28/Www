@@ -270,6 +270,30 @@
   #islandMap .cell.done { background: rgba(126,224,122,.2); }
   #islandMap .cell.fog { opacity: .5; }
   #mapGems { text-align: center; }
+  #islandMap .cell s { position: absolute; top: 3px; left: 6px; text-decoration: none; font-size: 11px; font-weight: 900; color: var(--gold); }
+  #timer { display: none; margin-top: 6px; background: rgba(20,24,43,.7); font-variant-numeric: tabular-nums; }
+  #timer.on { display: inline-flex; }
+  #timer.low { background: var(--coral); color: #fff; animation: pulse .5s infinite alternate; }
+  /* «Летопись»: the book of the world's lore (from the pause) */
+  #chronBtn .dot { display: none; width: 9px; height: 9px; border-radius: 50%; background: var(--coral); margin-left: 6px; }
+  #chronBtn.fresh .dot { display: inline-block; }
+  #chronicle .card { margin: auto 0; display: flex; flex-direction: column; gap: 10px; max-height: calc(100% - 8px); }
+  #chronicle .head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  #chronicle h2 { font-size: 24px; font-weight: 900; }
+  #chronList, #chronPage { overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; min-height: 0; }
+  #chronList h4 { margin: 10px 2px 6px; color: var(--gold); font-size: 13px; font-weight: 900; letter-spacing: .03em; text-transform: uppercase; }
+  #chronList .page { display: block; width: 100%; text-align: left; margin: 0 0 6px; padding: 10px 12px; border: 0; border-radius: 12px; background: rgba(255,255,255,.08); color: var(--text); font: inherit; }
+  #chronList .page b { font-weight: 800; font-size: 15px; }
+  #chronList .page small { display: block; margin-top: 3px; color: var(--muted); font-weight: 700; font-size: 12px; }
+  #chronList .page.shut { opacity: .6; }
+  #chronList .page.fresh b::after { content: ' • новое'; color: var(--coral); font-size: 12px; }
+  #chronPage { display: none; }
+  #chronPage h3 { font-size: 22px; font-weight: 900; color: var(--gold); margin: 6px 0 10px; }
+  #chronPage p { font-size: 17px; font-weight: 700; line-height: 1.45; margin-bottom: 10px; }
+  #chronicle.reading #chronList { display: none; }
+  #chronicle.reading #chronPage { display: block; }
+  #chronicle:not(.reading) #chronBack { display: none; }
+  #chronicle .row { display: flex; } #chronicle .row .btn { flex: 1; }
   @keyframes card { 0% { opacity: 0; transform: translateY(10px) scale(.9); } 12% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
   @keyframes shake { 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
   /* hero creator */
@@ -418,7 +442,8 @@
     <div class="arcade-only"><div class="tally"><div id="score" class="score">0</div><div id="wave" class="wave">Волна 1</div></div><span id="mult" class="chip mult">×2 следующий выстрел</span><div id="perkRow"></div></div>
     <div class="story-only"><div id="hearts" role="img" aria-label="Сердца"></div><div id="task"></div>
       <div id="bossBar" role="status"><b id="bossName"></b><div class="bar"><i id="bossFill"></i></div></div>
-      <div id="temp" role="status"><span id="tempLabel"></span><div class="bar"><i id="tempFill"></i></div></div></div>
+      <div id="temp" role="status"><span id="tempLabel"></span><div class="bar"><i id="tempFill"></i></div></div>
+      <span id="timer" class="chip" role="timer"></span></div>
     <span class="spacer"></span>
     <button id="pauseBtn" class="btn icon ghost" aria-label="Пауза">❚❚</button>
   </div>
@@ -452,6 +477,7 @@
     <div class="story-only"><div id="islandMap" aria-label="Карта острова"></div><p id="mapGems" class="note"></p></div>
     <button id="resumeBtn" class="btn big">Продолжить</button>
     <button id="restartBtn" class="btn ghost arcade-only">Заново</button>
+    <button id="chronBtn" class="btn ghost story-only">📜 Летопись<span class="dot"></span></button>
     <button id="lookBtn" class="btn ghost story-only">Облик героя</button>
     <button id="quitBtn" class="btn ghost">В меню</button>
   </div>
@@ -475,6 +501,15 @@
         <button id="menuBtn" class="btn ghost">Меню</button>
       </div>
     </div>
+  </div>
+</section>
+
+<section id="chronicle" class="screen dim">
+  <div class="card">
+    <div class="head"><h2>📜 Летопись</h2><span id="chronCount" class="chip"></span></div>
+    <div id="chronList"></div>
+    <div id="chronPage"><h3 id="chronTitle"></h3><div id="chronText"></div></div>
+    <div class="row"><button id="chronBack" class="btn ghost">← Назад</button><button id="chronClose" class="btn">Закрыть</button></div>
   </div>
 </section>
 

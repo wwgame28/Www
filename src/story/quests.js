@@ -1,9 +1,11 @@
 // The quest machine of «Приключение». Every kingdom has its own quest line; lines run side by side
 // (open world): the active line is the first unfinished one of the current zone whose requirements
-// are met. Pure: it reads and changes the world state from world.js and emits events for the UI.
+// are met. Side lines (side: true, the ⭐ errands) come after their kingdom's own line. Pure: it reads
+// and changes the world state from world.js and emits events for the UI.
 import { BASES, PALETTES, SKINS, GEMS, BLESSINGS } from './data.js';
 import { LINES, ZONES } from './zones/index.js';
 import { WEAPONS } from '../weapons.js';
+import { SCROLLS, getPage } from './chronicle.js';
 
 const emit = (g, type, data = {}) => g.events.push({ type, ...data });
 export const say = (g, text) => text.replaceAll('{name}', g.heroName);
@@ -27,6 +29,7 @@ export function stepOf(g) {
 export function beginStep(g) {
   const st = stepOf(g);
   g.targets = []; g.raid = null; g.items = []; g.camps = []; g.object = null; g.reach = null; g.advanceT = -1; g.setup = null;
+  g.stepT = st?.time || 0; // a timed step: seconds to finish it (world.js counts down)
   for (const v of g.villagers) v.quest = false;
   // How the queen looks now: the line's start state, changed by the steps so far ('asleep', 'frozen'…).
   const l = lineOf(g);
@@ -50,7 +53,7 @@ export function beginStep(g) {
     if (st.at) g.reach = { x: st.at[0], z: st.at[1], r: st.at[2] || 2 };
   }
   g.setup = t === 'clear' || t === 'boss' ? t : null; // world.js spawns camps and bosses on its next step
-  emit(g, 'stepStart', { task: taskOf(g).text, hint: st.hint, banner: st.banner, kind: t });
+  emit(g, 'stepStart', { task: taskOf(g).text, hint: st.hint, banner: st.banner, kind: t, side: !!l.side, first: !g.story.lines[l.id], time: g.stepT });
 }
 
 // The objective is met: go on after a short pause (so the last target falls, the last raider drops).
@@ -118,22 +121,28 @@ export function taskOf(g) {
   else if (st.type === 'collect') { const left = g.items.filter((x) => !x.taken); if (g.items.length > 1) text = count(g.items.length - left.length, g.items.length); at = near(h, left); }
   else if (st.type === 'reach') at = g.reach || g.gates.find((x) => x.id === st.gate);
   else if (st.type === 'boss') at = g.enemies.find((e) => e.boss && !e.dead) || null;
+  if (lineOf(g).side) text = `⭐ ${text}`;
   return { text, x: at ? at.x : null, z: at ? at.z : null };
 }
 
-// Between kingdoms: where to go next. In the village, the nearest gate of an unfinished kingdom.
+// Between kingdoms: where to go next — the nearest gate toward a kingdom's own line; once those are
+// all done, toward the ⭐ errands left.
 function hubTask(g) {
   const s = g.story;
-  if (s.done.includes('finale')) return { text: 'Остров Семи Корон спасён!', x: null, z: null };
-  const open = g.gates.filter((t) => meets(s, t.requires) && ZONES[t.to] && LINES.some((l) => l.zone === t.to && !s.done.includes(l.id) && meets(s, l.requires)));
-  const gate = near(g.hero, open);
+  const toward = (side) => g.gates.filter((t) => meets(s, t.requires) && ZONES[t.to]
+    && LINES.some((l) => l.zone === t.to && !!l.side === side && !s.done.includes(l.id) && meets(s, l.requires)));
+  const main = toward(false), gate = near(g.hero, main.length ? main : toward(true));
+  const at = { x: gate ? gate.x : null, z: gate ? gate.z : null };
+  if (s.done.includes('finale')) {
+    const left = LINES.filter((l) => l.side && !s.done.includes(l.id)).length;
+    return { text: left ? `Остров спасён! ⭐ Поручений осталось: ${left}` : 'Остров Семи Корон спасён!', ...(left ? at : { x: null, z: null }) };
+  }
   const here = g.area.id === 'village';
-  const text = here ? `Верни камни королев · ${s.gems.length}/${GEMS.length}` : 'Здесь всё спокойно — иди дальше';
-  return { text, x: gate ? gate.x : null, z: gate ? gate.z : null };
+  return { text: here ? `Верни камни королев · ${s.gems.length}/${GEMS.length}` : 'Здесь всё спокойно — иди дальше', ...at };
 }
 
 // ---------- save ----------
-export const blankStory = () => ({ v: 2, hero: null, zone: 'village', flags: [], gems: [], blessings: [], lines: {}, done: [], drop: null });
+export const blankStory = () => ({ v: 2, hero: null, zone: 'village', flags: [], gems: [], blessings: [], lines: {}, done: [], drop: null, scrolls: [], read: [] });
 const pick = (list, id, key = 'id') => (list.some((x) => x[key] === id) ? id : list[0][key]);
 const strings = (a, ok) => (Array.isArray(a) ? [...new Set(a.filter((x) => typeof x === 'string' && x.length < 40 && ok(x)))] : []);
 
@@ -164,6 +173,8 @@ export function repairStory(s) {
       if (l && !out.done.includes(id) && k >= 0 && k < l.steps.length) out.lines[id] = k;
     }
     out.zone = ZONES[s.zone] ? s.zone : 'village';
+    out.scrolls = strings(s.scrolls, (id) => SCROLLS.some((p) => p.id === id)); // the «Летопись»: scrolls found, pages read
+    out.read = strings(s.read, (id) => !!getPage(id));
   }
   out.drop = Array.isArray(s.drop) && s.drop.length === 2 && s.drop.every(Number.isFinite) ? [s.drop[0], s.drop[1]] : null;
   return out;

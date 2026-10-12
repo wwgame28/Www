@@ -11,6 +11,7 @@ import { FOOTPRINTS } from '../src/footprints.js';
 import { WEAPONS } from '../src/weapons.js';
 import { heroDef, recolorPixels, mainClothHue } from '../src/story/hero.js';
 import { play } from './bot.mjs';
+import { PAGES, BOOKS, SCROLLS, pageOpen, SCROLL_REWARD } from '../src/story/chronicle.js';
 
 const asset = (kit, model) => new URL(`../assets/${kit}/${model}.glb`, import.meta.url);
 const kitOf = (zone, m) => (m.startsWith('@') ? m.slice(1).split('/') : [zone.kit, m]);
@@ -78,6 +79,7 @@ test('key spots stand on free ground inside their zone', () => {
     free(zone.campfire.x, zone.campfire.z + 1.8, 0.5, 'wake-up spot');
     for (const v of [...zone.villagers, ...(zone.queen ? [zone.queen] : [])]) free(v.x, v.z, 0.5, v.name);
     for (const [k, [x, z]] of Object.entries(zone.entries)) free(x, z, 0.5, `entry ${k}`);
+    for (const p of SCROLLS.filter((x) => x.unlock.scroll.zone === zone.id)) free(p.unlock.scroll.x, p.unlock.scroll.z, 0.5, `scroll ${p.id}`);
     for (const l of LINES.filter((x) => x.zone === zone.id)) {
       for (const st of l.steps) {
         if (st.type === 'targets') for (const [x, z] of st.targets) if (st.style !== 'prison') free(x, z, 0.7, `${l.id} target ${x},${z}`);
@@ -402,4 +404,61 @@ test('every queen sits on a solid throne', () => {
     const g = world(zone.id), q = zone.queen;
     assert.ok(g.solids.some((o) => solidContact(o, q.x - Math.sin(q.facing) * 1.1, q.z - Math.cos(q.facing) * 1.1, 0.3)), zone.id);
   }
+});
+
+// ---------- ⭐ errands and the «Летопись» ----------
+const MAIN = LINES.filter((l) => !l.side).map((l) => l.id);
+const AFTER = { ...base, gems: [...ALL, 'obsidian'], blessings: BLESS, done: MAIN }; // the island saved
+for (const l of LINES.filter((x) => x.side)) {
+  test(`errand «${l.id}» plays through to the end`, () => {
+    const before = LINES.filter((x) => x.side && x.zone === l.zone && LINES.indexOf(x) < LINES.indexOf(l)).map((x) => x.id);
+    const g = createWorld({ zoneId: l.zone, story: { ...AFTER, done: [...MAIN, ...before] }, weaponId: 'ricochet', heroName: 'Бот' });
+    assert.equal(lineOf(g)?.id, l.id, 'the errand is the open line');
+    assert.match(taskOf(g).text, /^⭐ /);
+    const seen = play(g, 900, (w) => w.story.done.includes(l.id));
+    assert.ok(g.story.done.includes(l.id), `stuck at step ${g.story.lines[l.id]}: ${taskOf(g).text}`);
+    assert.ok(seen.includes('lineDone'));
+  });
+}
+
+test('errands wait for their kingdom; the arrow keeps to the kingdoms\' own lines first', () => {
+  for (const l of LINES.filter((x) => x.side)) assert.ok(!l.gem && !l.blessing && l.coins > 0, `${l.id} pays coins only`);
+  assert.notEqual(lineOf(world('forest', base))?.side, true, 'the forest\'s own line comes first');
+  const g = world('village', { ...base, gems: ['emerald'], done: ['awakening', 'nature'] });
+  assert.equal(lineOf(g)?.id, 'smith-ore', 'the smith asks after the first gem');
+  const done = world('village', { ...AFTER, done: [...MAIN, 'smith-ore', 'guard-targets'] });
+  assert.match(taskOf(done).text, /Поручений осталось: 14/);
+  assert.ok(taskOf(done).x !== null, 'the arrow shows a gate toward the errands');
+});
+
+test('a timed step starts over when the time runs out', () => {
+  const g = world('village', { ...AFTER, done: [...MAIN, 'smith-ore'], lines: { 'guard-targets': 1 } });
+  assert.equal(stepOf(g).type, 'targets');
+  assert.equal(g.stepT, 60);
+  g.targets[0].hit = true; // one down…
+  const evs = run(g, 61);
+  assert.ok(evs.some((e) => e.type === 'timeUp'));
+  assert.ok(g.targets.every((t) => !t.hit) && g.stepT > 55, 'all targets stand again, the clock restarted');
+});
+
+test('scrolls of the «Летопись» lie in the kingdoms; finding one opens its page, all of them pay', () => {
+  assert.equal(new Set(PAGES.map((p) => p.id)).size, PAGES.length, 'page ids are unique');
+  for (const p of PAGES) {
+    assert.ok(BOOKS.some((b) => b.id === p.book), p.id);
+    assert.ok(p.text.length && p.text.every((t) => t.length > 20), `${p.id} has text`);
+    if (p.unlock.done) assert.ok(LINES.some((l) => l.id === p.unlock.done), `${p.id} opens with a real line`);
+    else assert.ok(ZONES[p.unlock.scroll.zone], `${p.id} lies in a real zone`);
+  }
+  for (const l of LINES.filter((x) => x.side)) assert.equal(PAGES.filter((p) => p.unlock.done === l.id).length, 1, `${l.id} opens one page`);
+  const sc = SCROLLS.find((p) => p.unlock.scroll.zone === 'forest');
+  const g = world('forest', { ...base, scrolls: SCROLLS.filter((p) => p !== sc).map((p) => p.id) });
+  g.hero.x = sc.unlock.scroll.x; g.hero.z = sc.unlock.scroll.z + 2;
+  const evs = run(g, 1.5, () => ({ move: { x: 0, z: -1 } }));
+  assert.ok(evs.some((e) => e.type === 'scroll' && e.id === sc.id && e.all), 'picked up — the last one');
+  assert.ok(evs.some((e) => e.type === 'reward' && e.coins === SCROLL_REWARD) && evs.some((e) => e.type === 'save'));
+  assert.ok(pageOpen(g.story, sc));
+  const again = world('forest', g.story);
+  assert.ok(again.scrolls.every((x) => x.taken), 'stays found');
+  const s = repairStory({ ...g.story, scrolls: [sc.id, 'junk'], read: ['song', 'nope'] });
+  assert.deepEqual([s.scrolls, s.read], [[sc.id], ['song']]);
 });
