@@ -94,7 +94,7 @@ function pushOutOfSolids(g, b) {
 // side forever (a wall's middle, a box face, dead center behind a pillar). A walker pressing into a
 // solid walks round it: the side is picked once on contact (the end with the shorter way to the hero)
 // and kept while it presses, so it never flip-flops. Deterministic: positions only.
-function slideAroundSolids(g, e, h, step) {
+export function slideAroundSolids(g, e, h, step) {
   let o = null, c = null;
   for (const s of g.solids) { c = solidContact(s, e.x, e.z, e.r + 0.02); if (c) { o = s; break; } }
   const dx = h.x - e.x, dz = h.z - e.z, d = Math.hypot(dx, dz) || 1;

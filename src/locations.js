@@ -131,7 +131,7 @@ export const LOCATIONS = [
 export const getLocation = (id) => LOCATIONS.find((l) => l.id === id) || (id === 'cave' ? LOCATIONS.find((l) => l.id === 'dungeon') : LOCATIONS[0]);
 
 // One layout entry → a solid sized like its model will be drawn. `fit` tells the renderer how to scale it.
-function solidFrom(kit, [model, x, z, rotDeg, size, shape]) {
+export function solidFrom(kit, [model, x, z, rotDeg, size, shape]) {
   if (model.startsWith('@')) [kit, model] = model.slice(1).split('/');
   const [mx, my, mz] = FOOTPRINTS[`${kit}/${model}`];
   const s = typeof size === 'object' ? size.h / my : size / Math.max(mx, mz);

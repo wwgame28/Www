@@ -12,6 +12,12 @@ import { challengeFromHash, challengeUrl } from './share.js';
 import * as progress from './progress.js';
 import * as shop from './shop.js';
 import { $, show, toast, renderHero, renderLocations, popup, banner, aimAt } from './ui.js';
+import { getWeapon } from './weapons.js';
+import { createWorld, stepWorld, nextLine } from './story/world.js';
+import { ZONES } from './story/data.js';
+import { taskOf, chapterOf, repairHero } from './story/quests.js';
+import { heroDef } from './story/hero.js';
+import { renderCreator, renderHearts, chapterCard } from './story/ui.js';
 
 const STEP = 1 / 60;
 const data = progress.load();
@@ -21,7 +27,8 @@ const centerOf = (id) => () => {
   const r = $(id).getBoundingClientRect();
   return r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
 };
-const viewMode = () => (data.settings.view === 'top' ? 'top' : 'tps'); // third person by default
+let storyOn = false; // «Приключение» is on: always third person (the top view only fits the arcade)
+const viewMode = () => (!storyOn && data.settings.view === 'top' ? 'top' : 'tps'); // third person by default
 const input = createInput(canvas, { stickCenter: centerOf('stick'), fireCenter: centerOf('fireBtn'), recallCenter: centerOf('recallBtn'), mode: viewMode });
 document.body.classList.toggle('stick-right', !!data.settings.stickRight);
 document.body.classList.toggle('tps', viewMode() === 'tps');
@@ -107,6 +114,7 @@ function refreshMenu() {
   $('menuLocation').textContent = l.name;
   $('menuBest').textContent = data.best[l.id] || 0;
   $('menuCoins').textContent = data.coins;
+  $('storySub').textContent = data.story.hero ? chapterOf(data.story)?.title ?? 'Остров спасён!' : 'Новое: открытый мир';
   const today = todayKey();
   const d = daily(today);
   $('dailySub').textContent = `${getLocation(d.locationId).name} · ${getHero(d.heroId).name}${data.daily[today] ? ` · 🏆 ${data.daily[today]}` : ''}`;
@@ -120,6 +128,7 @@ function refreshMenu() {
 async function toMenu() {
   mode = 'menu';
   input.setEnabled(false);
+  if (storyOn) leaveStory();
   await buildScene(data.location, data.hero);
   await view.setGear(data.look, false); // back from the shop: take off whatever was only tried on
   view.clearRun();
@@ -231,7 +240,8 @@ function handle(ev) {
   if (ev.type === 'kill') {
     const s = view.worldToScreen(ev.x, 1.2, ev.z);
     const cls = ev.combo >= 5 ? 'combo c5' : ev.combo >= 3 ? 'combo c3' : ev.combo > 1 ? 'combo' : '';
-    popup(s.x, s.y, ev.combo > 1 ? `+${ev.points} ×${ev.combo}` : `+${ev.points}`, cls);
+    const text = ev.points ? (ev.combo > 1 ? `+${ev.points} ×${ev.combo}` : `+${ev.points}`) : ev.combo > 1 ? `×${ev.combo}` : '';
+    if (text) popup(s.x, s.y, text, cls);
     if (ev.tricks?.length) popup(s.x, s.y - 34, ev.tricks.join(' · '), 'trick');
     killSound = Math.max(killSound, ev.combo);
     shot.kills++; shot.points += ev.points;
@@ -268,7 +278,7 @@ function handle(ev) {
     popup(s.x, s.y, 'Щит!', 'combo');
     renderPerkRow();
     freeze(0.09);
-  }
+  } else if (game?.mode === 'story') storyEvent(ev);
 }
 
 // When a shot ends with 2+ kills, show its total over the hero.
@@ -288,18 +298,7 @@ function updateHud() {
   ammo.textContent = held ? '● В руке' : p.state === 'dropped' ? '○ Подбери пулю!' : '➶ В полёте';
   ammo.classList.toggle('empty', p.state === 'dropped');
   // Off-screen pointer to the dropped projectile.
-  const arrow = $('arrow');
-  const s = view.worldToScreen(p.x, 0.3, p.z);
-  if (p.state === 'dropped' && !s.inside) {
-    const w = innerWidth, h = innerHeight, cx = w / 2, cy = h / 2;
-    const a = Math.atan2(s.y - cy, s.x - cx);
-    const m = 36;
-    const k = Math.min((w / 2 - m) / Math.abs(Math.cos(a) || 1e-6), (h / 2 - m) / Math.abs(Math.sin(a) || 1e-6));
-    arrow.style.display = 'block';
-    arrow.style.left = `${cx + Math.cos(a) * k - 12}px`;
-    arrow.style.top = `${Math.min(innerHeight - 260, cy + Math.sin(a) * k) - 11}px`; // above the stick and fire button
-    arrow.style.transform = `rotate(${a + Math.PI / 2}rad)`;
-  } else arrow.style.display = 'none';
+  pointAt($('arrow'), p.state === 'dropped' ? view.worldToScreen(p.x, 0.3, p.z) : null);
   // Fixed joystick: only the knob moves, clamped to the ring.
   const st = input.stick(), el = $('stick');
   let kx = 0, ky = 0;
@@ -318,6 +317,20 @@ function updateHud() {
   if (ready) hintOnce('recall', tps ? 'Нажми ↩ — оружие само вернётся в руку' : 'Нажми ↩ внизу — оружие само вернётся в руку');
   $('fireBtn').classList.toggle('empty', game.projectile.state !== 'held' && !ready);
   el.firstElementChild.style.transform = `translate(${kx}px, ${ky}px)`;
+  if (game.mode === 'story') updateStoryHud();
+}
+
+// An arrow at the screen edge toward an off-screen point (s: worldToScreen result; null hides it).
+function pointAt(el, s) {
+  if (!s || s.inside) { el.style.display = 'none'; return; }
+  const w = innerWidth, h = innerHeight, cx = w / 2, cy = h / 2;
+  const a = Math.atan2(s.y - cy, s.x - cx);
+  const m = 36;
+  const k = Math.min((w / 2 - m) / Math.abs(Math.cos(a) || 1e-6), (h / 2 - m) / Math.abs(Math.sin(a) || 1e-6));
+  el.style.display = 'block';
+  el.style.left = `${cx + Math.cos(a) * k - 12}px`;
+  el.style.top = `${Math.min(innerHeight - 260, cy + Math.sin(a) * k) - 11}px`; // above the stick and fire button
+  el.style.transform = `rotate(${a + Math.PI / 2}rad)`;
 }
 
 // ---------- perks ----------
@@ -400,7 +413,8 @@ function frame(now) {
         else { fire = view.screenToGround(q.x, q.y); aimAt(q.x, q.y); }
       } else if (queued && (queued.t -= STEP) <= 0) queued = null;
       const wasFlying = game.projectile.state === 'flying';
-      step(game, STEP, { move: moveVector(), fire, recall: recallNow });
+      if (game.mode === 'story') { stepWorld(game, STEP, { move: moveVector(), fire, recall: recallNow, talk: talkPress }); talkPress = false; }
+      else step(game, STEP, { move: moveVector(), fire, recall: recallNow });
       for (const ev of game.events) handle(ev);
       game.events.length = 0;
       if (killSound) { audio.play({ type: 'kill', combo: killSound }); killSound = 0; }
@@ -415,9 +429,9 @@ function frame(now) {
     view.setAim(target ? previewPath(game.weapon.id, game.hero, target, { arena: game.arena, solids: game.solids, rule: game.loc.rule }, game.mods) : null);
     updateHud();
   }
-  if (game && mode !== 'menu') view.sync(game, dt * k, { yaw });
+  if (game && mode !== 'menu' && mode !== 'creator') view.sync(game, dt * k, { yaw });
   if (game && mode === 'playing' && viewMode() === 'tps') placeCrosshair(dt);
-  if (mode === 'playing' && game?.over) {
+  if (mode === 'playing' && game?.over && game.mode !== 'story') { // the story's hero wakes at the campfire instead
     overTimer -= dt;
     if (overTimer <= 0) finish();
   }
@@ -544,6 +558,203 @@ for (const t of document.querySelectorAll('#shop .tab')) {
     renderShop();
   });
 }
+
+// ---------- adventure («Приключение») ----------
+// The open world: the island's zones (story/data.js), the creator, hearts, tasks and dialogues.
+const STORY_ZONE = 'village';
+let talkPress = false;   // «Говорить» was tapped; read by the next simulation step
+let draft = null;        // the creator's choices while it is open
+let creatorFirst = false; // the first visit: its button starts the adventure
+let creatorTab = 'look';
+const storyHud = { hearts: -1, task: '' };
+const defaultLook = () => ({ base: 'Rogue_Hooded', palette: 'forest', skin: 'medium', weapon: 'ricochet', name: 'Герой' });
+
+let storyLoading = false;
+async function startStory() {
+  if (storyLoading) return;
+  storyLoading = true;
+  try { await enterStory(); } finally { storyLoading = false; }
+}
+async function enterStory() {
+  audio.unlock();
+  screen.orientation?.lock?.('portrait').catch(() => {});
+  input.setEnabled(false);
+  $('loadingText').textContent = 'Загрузка: Деревня…';
+  show('loading');
+  await view.setZone(ZONES[STORY_ZONE]);
+  sceneKey = `story:${STORY_ZONE}`;
+  storyOn = true;
+  document.body.classList.add('story', 'tps');
+  view.setView('tps');
+  const look = data.story.hero || defaultLook();
+  await wearLook(look);
+  game = createWorld({ zoneId: STORY_ZONE, story: data.story, weaponId: look.weapon, heroName: look.name });
+  view.clearRun(game.hero);
+  storyHud.hearts = -1; storyHud.task = '';
+  if (!data.story.hero) openCreator(true);
+  else playStory(true);
+}
+
+function leaveStory() {
+  storyOn = false;
+  game = null;
+  document.body.classList.remove('story', 'talking');
+  document.body.classList.toggle('tps', viewMode() === 'tps');
+  view.setView(viewMode());
+  $('dialog').classList.remove('on');
+}
+
+async function wearLook(look) {
+  const def = heroDef(look);
+  heroKey = 'story'; // the arcade hero loads again on the way back to the menu
+  audio.setVoice(def.proj.orb ? 'zap' : 'whoosh');
+  await view.setHero(def);
+}
+
+function playStory(card = false) {
+  view.setMenu(false);
+  view.resize();
+  timeFx.length = 0; queued = null; lock = null; cross = null; shot = { kills: 0, points: 0 }; talkPress = false;
+  yaw = game.hero.facing - Math.PI; // the camera looks the way the hero faces
+  updateHint();
+  $('hint').style.opacity = hintShown ? 0 : 1;
+  $('pops').innerHTML = '';
+  show('hud');
+  if (card) chapterCard(chapterOf(game.story)?.title ?? 'Остров спасён!', taskOf(game).text);
+  input.setEnabled(true);
+  last = performance.now();
+  mode = 'playing';
+}
+
+function updateStoryHud() {
+  const g = game;
+  if (storyHud.hearts !== g.hearts) {
+    renderHearts(g.hearts, g.maxHearts, g.hearts < storyHud.hearts);
+    storyHud.hearts = g.hearts;
+  }
+  const t = taskOf(g);
+  if (storyHud.task !== t.text) {
+    storyHud.task = t.text;
+    const el = $('task');
+    el.textContent = t.text;
+    el.classList.remove('new'); void el.offsetWidth; el.classList.add('new');
+  }
+  $('talkBtn').classList.toggle('on', !!g.near && !g.talk && !g.over);
+  document.body.classList.toggle('talking', !!g.talk);
+  pointAt($('taskArrow'), t.x === null || g.talk ? null : view.worldToScreen(t.x, 1, t.z));
+}
+
+function showLine() {
+  const t = game?.talk;
+  if (!t) { $('dialog').classList.remove('on'); return; }
+  $('dialogName').textContent = t.name;
+  $('dialogText').textContent = t.lines[t.i];
+  $('dialog').classList.add('on');
+}
+
+function storyEvent(ev) {
+  const at = (y = 1.6) => view.worldToScreen(ev.x ?? game.hero.x, y, ev.z ?? game.hero.z);
+  switch (ev.type) {
+    case 'stepStart':
+      if (ev.banner) banner(ev.banner);
+      if (ev.hint) toast(ev.hint);
+      break;
+    case 'talk': audio.play({ type: 'click' }); showLine(); break;
+    case 'talkEnd': showLine(); break;
+    case 'reward': {
+      data.coins += ev.coins;
+      progress.save(data);
+      const s = view.worldToScreen(game.hero.x, 2.2, game.hero.z);
+      popup(s.x, s.y, `+${ev.coins} 🪙`, 'total');
+      audio.play({ type: 'waveClear' });
+      break;
+    }
+    case 'save':
+      data.story = { ...data.story, chapter: game.story.chapter, step: game.story.step, flags: [...game.story.flags], drop: game.story.drop };
+      progress.save(data);
+      break;
+    case 'chapterDone': chapterCard(ev.title, 'Глава пройдена!'); audio.play({ type: 'waveClear' }); break;
+    case 'hit': audio.play({ type: 'hurt' }); freeze(0.06); break;
+    case 'faint':
+      audio.play({ type: 'death' });
+      timeFx.length = 0;
+      timeFx.push({ k: 0, t: 0.15 }, { k: 0.35, t: 0.6 });
+      banner('Без сил…');
+      break;
+    case 'wake': chapterCard('Ты очнулся у костра', 'Сердца восстановлены'); break;
+    case 'heal': audio.play({ type: 'pickup' }); break;
+    case 'target': {
+      const s = at();
+      popup(s.x, s.y, ev.left ? 'Есть!' : 'Все мишени!', 'combo');
+      audio.play({ type: 'kill', combo: 3 - ev.left });
+      freeze(0.04);
+      break;
+    }
+    case 'raidWave': banner(`Волна ${ev.wave} из ${ev.of}`); audio.play({ type: 'wave' }); break;
+    case 'raidDone': slowMo(0.3, 0.45); break;
+    case 'shard': banner('Осколок кристалла!'); audio.play({ type: 'waveClear' }); slowMo(0.5, 0.4); break;
+    case 'gate': if (!ZONES[ev.to]) toast('Дорога в лес откроется в следующем обновлении'); break;
+    case 'gateClosed': toast('Ворота закрыты — сначала помоги деревне'); break;
+  }
+}
+
+// The creator: the hero turns on the spot and wears every choice at once.
+function openCreator(first) {
+  creatorFirst = first;
+  draft = { ...(data.story.hero || defaultLook()) };
+  mode = 'creator';
+  input.setEnabled(false);
+  view.setMenu('creator');
+  $('creatorGo').textContent = first ? 'В путь!' : 'Готово';
+  $('heroNameInput').value = first ? '' : draft.name;
+  creatorTab = 'look';
+  renderCreator(creatorTab, draft, pickLook);
+  show('creator');
+}
+function pickLook(key, id) {
+  if (draft[key] === id) return;
+  draft[key] = id;
+  audio.play({ type: 'click' });
+  renderCreator(creatorTab, draft, pickLook);
+  wearLook(draft);
+}
+for (const t of document.querySelectorAll('[data-ctab]')) {
+  t.addEventListener('click', () => { creatorTab = t.dataset.ctab; audio.play({ type: 'click' }); renderCreator(creatorTab, draft, pickLook); });
+}
+$('creatorGo').addEventListener('click', async () => {
+  draft.name = $('heroNameInput').value;
+  const hero = repairHero(draft);
+  data.story.hero = hero;
+  progress.save(data);
+  $('heroNameInput').blur();
+  audio.play({ type: 'catch' });
+  game.heroName = hero.name;
+  if (game.weapon.id !== hero.weapon) { // a new weapon starts in the hand
+    game.weapon = getWeapon(hero.weapon);
+    game.projectile = { state: 'held', x: game.hero.x, z: game.hero.z, vx: 0, vz: 0, hits: new Set(), events: [] };
+  }
+  await wearLook(hero);
+  playStory(creatorFirst);
+});
+$('creatorBack').addEventListener('click', async () => {
+  audio.play({ type: 'click' });
+  $('heroNameInput').blur();
+  if (creatorFirst) { toMenu(); return; }
+  await wearLook(data.story.hero); // nothing changes
+  view.setMenu(false);
+  mode = 'paused';
+  show('pause');
+});
+$('heroNameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
+$('storyBtn').addEventListener('click', () => { audio.play({ type: 'click' }); startStory().catch((e) => { console.error(e); toast('Не удалось загрузить остров'); toMenu(); }); });
+$('talkBtn').addEventListener('click', () => { talkPress = true; });
+$('dialog').addEventListener('click', () => {
+  if (!game?.talk) return;
+  audio.play({ type: 'click' });
+  nextLine(game);
+  showLine();
+});
+$('lookBtn').addEventListener('click', () => { audio.play({ type: 'click' }); openCreator(false); });
 
 function pickLocation(id) { data.location = id; progress.save(data); renderLocations(data, pickLocation); toast(`Локация: ${getLocation(id).name}`); }
 
