@@ -197,6 +197,42 @@
   #toast { position: fixed; left: 50%; bottom: calc(24px + var(--safe-b)); transform: translate(-50%, 20px); background: var(--panel-solid); padding: 12px 18px; border-radius: 14px; font-weight: 800; opacity: 0; transition: .25s; pointer-events: none; }
   #toast.on { opacity: 1; transform: translate(-50%, 0); }
 
+  /* «Приключение»: story-only and arcade-only parts of shared screens */
+  body:not(.story) .story-only, body.story .arcade-only { display: none !important; }
+  #hearts { display: flex; gap: 2px; font-size: 22px; filter: drop-shadow(0 2px 2px rgba(0,0,0,.5)); }
+  #hearts span { transition: transform .15s, opacity .15s; }
+  #hearts .off { opacity: .28; filter: grayscale(1); }
+  #hearts.hit { animation: shake .35s; }
+  #task { margin-top: 6px; background: rgba(20,24,43,.62); border-radius: 12px; padding: 7px 11px; font-weight: 800; font-size: 14px; line-height: 1.25; max-width: min(72vw, 300px); }
+  #task.new { animation: pop .4s cubic-bezier(.2,.8,.2,1); }
+  #talkBtn { position: absolute; left: calc(20px + var(--safe-l)); bottom: calc(184px + var(--safe-b)); pointer-events: auto; display: none; min-height: 52px; font-size: 18px; }
+  body.stick-right #talkBtn { left: auto; right: calc(20px + var(--safe-r)); }
+  body.story #hint { top: calc(150px + var(--safe-t)); }
+  #talkBtn.on { display: inline-flex; animation: pop .3s cubic-bezier(.2,.8,.2,1); }
+  #dialog { position: absolute; left: calc(12px + var(--safe-l)); right: calc(12px + var(--safe-r)); bottom: calc(16px + var(--safe-b)); min-height: 150px; pointer-events: auto; display: none; padding: 16px 18px 30px; border-color: rgba(255,211,77,.45); }
+  #dialog.on { display: block; animation: pop .25s cubic-bezier(.2,.8,.2,1); }
+  #dialog b { display: block; color: var(--gold); font-size: 15px; font-weight: 900; margin-bottom: 6px; }
+  #dialog p { font-size: 18px; font-weight: 700; line-height: 1.35; }
+  #dialog .more { position: absolute; right: 16px; bottom: 10px; color: var(--muted); font-size: 13px; font-weight: 800; animation: pulse .6s infinite alternate; }
+  body.talking #stick, body.talking #fireBtn, body.talking #ammo, body.talking #crosshair, body.talking #talkBtn { visibility: hidden; }
+  #taskArrow { position: absolute; width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-bottom: 22px solid var(--sky); filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); display: none; pointer-events: none; }
+  #chapterCard { position: absolute; left: 16px; right: 16px; top: 44%; text-align: center; pointer-events: none; opacity: 0; }
+  #chapterCard small { display: block; color: #fff; font-weight: 800; font-size: 15px; text-shadow: 0 2px 6px rgba(0,0,0,.6); }
+  #chapterCard h2 { font-size: 30px; font-weight: 900; color: var(--gold); text-shadow: 0 4px 0 var(--gold-dark), 0 8px 20px rgba(0,0,0,.5); margin-top: 4px; }
+  #chapterCard.go { animation: card 3.2s cubic-bezier(.2,.8,.2,1); }
+  @keyframes card { 0% { opacity: 0; transform: translateY(10px) scale(.9); } 12% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes shake { 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
+  /* hero creator */
+  .creator-card { display: flex; flex-direction: column; gap: 10px; }
+  .name-input { flex: 1; min-width: 0; min-height: 46px; border-radius: 14px; border: 2px solid var(--line); background: rgba(255,255,255,.08); color: #fff; font: inherit; font-weight: 800; font-size: 18px; padding: 0 14px; -webkit-user-select: text; user-select: text; }
+  .name-input:focus { outline: none; border-color: var(--gold); }
+  .tabs.two { grid-template-columns: 1fr 1fr; }
+  .pick-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pick-row > small { width: 64px; color: var(--muted); font-weight: 800; font-size: 13px; }
+  .pick { appearance: none; border: 2px solid transparent; border-radius: 12px; min-height: 40px; padding: 0 10px; font: inherit; font-weight: 800; font-size: 14px; color: #fff; background: rgba(255,255,255,.08); touch-action: manipulation; }
+  .pick.on { border-color: var(--gold); background: rgba(255,211,77,.16); }
+  .pick.sw { width: 36px; min-height: 36px; padding: 0; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(255,255,255,.3); }
+  .pick.sw.on { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
   /* The game is portrait-only. iOS can't lock orientation from a web page, so in landscape
      a full-screen prompt covers everything (and the game pauses — see main.js). */
   #rotate { position: fixed; inset: 0; z-index: 50; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; background: var(--ink); }
@@ -249,7 +285,8 @@
   </div>
   <div id="challenge" class="card"><p id="challengeText"></p><button id="challengeBtn" class="btn coral" style="width:100%;margin-top:10px">Принять вызов</button></div>
   <div class="stack">
-    <button id="playBtn" class="btn big">Играть</button>
+    <button id="playBtn" class="btn big">Аркада</button>
+    <button id="storyBtn" class="btn big coral"><span class="twol">Приключение<span id="storySub" class="sub"></span></span></button>
     <button id="dailyBtn" class="btn sky"><span class="twol">Вызов дня<span id="dailySub" class="sub"></span></span></button>
     <div class="row">
       <button class="btn ghost" data-go="heroes">🧙 Герои</button>
@@ -272,6 +309,20 @@
     <div id="shopGrid" class="shop-grid"></div>
     <p id="shopInfo" class="note shop-info"></p>
     <button id="shopAction" class="btn big" style="width:100%"></button>
+  </div>
+</section>
+
+<section id="creator" class="screen">
+  <div class="topbar"><button id="creatorBack" class="btn icon ghost" aria-label="Назад">‹</button><input id="heroNameInput" class="name-input" maxlength="14" placeholder="Имя героя" autocomplete="off" autocapitalize="words" enterkeyhint="done" aria-label="Имя героя"></div>
+  <div class="spacer"></div>
+  <div class="card creator-card">
+    <div class="tabs two" role="tablist">
+      <button class="tab" role="tab" data-ctab="look">Облик</button>
+      <button class="tab" role="tab" data-ctab="weapon">Оружие</button>
+    </div>
+    <div id="creatorPicks" class="stack" style="gap:8px"></div>
+    <p id="creatorInfo" class="note shop-info"></p>
+    <button id="creatorGo" class="btn" style="width:100%">В путь!</button>
   </div>
 </section>
 
@@ -314,7 +365,8 @@
 
 <section id="hud" class="screen">
   <div class="top">
-    <div><div class="tally"><div id="score" class="score">0</div><div id="wave" class="wave">Волна 1</div></div><span id="mult" class="chip mult">×2 следующий выстрел</span><div id="perkRow"></div></div>
+    <div class="arcade-only"><div class="tally"><div id="score" class="score">0</div><div id="wave" class="wave">Волна 1</div></div><span id="mult" class="chip mult">×2 следующий выстрел</span><div id="perkRow"></div></div>
+    <div class="story-only"><div id="hearts" role="img" aria-label="Сердца"></div><div id="task"></div></div>
     <span class="spacer"></span>
     <button id="pauseBtn" class="btn icon ghost" aria-label="Пауза">❚❚</button>
   </div>
@@ -324,6 +376,10 @@
   <div id="crosshair"></div>
   <div id="aim"></div>
   <div id="arrow"></div>
+  <div id="taskArrow"></div>
+  <button id="talkBtn" class="btn story-only">💬 Говорить</button>
+  <div id="dialog" class="card story-only" role="dialog" aria-live="polite"><b id="dialogName"></b><p id="dialogText"></p><span class="more">нажми ▶</span></div>
+  <div id="chapterCard"><small id="cardSub"></small><h2 id="cardTitle"></h2></div>
   <div id="banner"></div>
   <div id="hint">Джойстик — бежать. Зажми палец — прицел, отпусти — выстрел.</div>
   <span id="ammo" class="chip">● В руке</span>
@@ -340,7 +396,8 @@
   <div class="card stack" style="margin:auto 0">
     <h2 style="text-align:center;font-size:28px;font-weight:900">Пауза</h2>
     <button id="resumeBtn" class="btn big">Продолжить</button>
-    <button id="restartBtn" class="btn ghost">Заново</button>
+    <button id="restartBtn" class="btn ghost arcade-only">Заново</button>
+    <button id="lookBtn" class="btn ghost story-only">Облик героя</button>
     <button id="quitBtn" class="btn ghost">В меню</button>
   </div>
 </section>

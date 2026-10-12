@@ -3,11 +3,12 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { Water } from 'three/addons/objects/Water.js';
 import { EffectComposer, RenderPass, EffectPass, BloomEffect, VignetteEffect } from 'postprocessing';
-import { ARENA } from './locations.js';
+import { ARENA, solidFrom } from './locations.js';
 import { solidExtent } from './solid.js';
 import { ENEMY_TYPES } from './waves.js';
 import { createFx } from './fx.js';
 import { SKINS, WEAPONS, TRAILS, RAINBOW, lookMaterial, orbMesh, hullFor } from './cosmetics.js';
+import { recolorPixels, mainClothHue } from './story/hero.js';
 
 const TRAIL_LEN = 24;
 const AIM_MAX = 200;
@@ -84,6 +85,8 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   let gear = { skin: null, weapon: null, trail: null }; // cosmetics worn (shop ids; null = the default look)
   let orbit = false; // shop trail preview: the weapon circles the hero
   let orbitA = 0;
+  let zoneOn = null;  // the story zone on show (setZone), else null
+  let storyV = null;  // its villagers, targets and shard views
 
   // Dark patches where skeletons climb out of the ground (a short warning before they come).
   const decals = Array.from({ length: 6 }, () => {
@@ -210,12 +213,16 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     occluders.push({ x, z, r, h: new THREE.Box3().setFromObject(obj).max.y, mats, fade: 1 });
   }
 
-  async function setLocation(loc, layout) {
+  // An empty level with the place's sky, fog and light (an arcade location or a story zone).
+  function newLevel(loc) {
     if (level) { scene.remove(level); level.traverse((o) => o.geometry?.dispose?.()); }
     for (const v of enemyViews.values()) scene.remove(v.obj);
     enemyViews.clear();
     dying.length = 0;
     water = null;
+    occluders.length = 0;
+    zoneOn = null; storyV = null;
+    sun.target.position.set(0, 0, 0);
     level = new THREE.Group();
 
     const sky = loc.look.bg !== undefined ? null : texLoader.load(`assets/sky/sky-${loc.sky}.jpg`);
@@ -226,8 +233,12 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     hemi.color.setHex(L.hemi[0]); hemi.groundColor.setHex(L.hemi[1]); hemi.intensity = L.hemi[2];
     sun.color.setHex(L.sun[0]); sun.intensity = L.sun[1];
     sun.position.set(...(L.sunPos || [-6, 14, 6]));
-    heroLight.intensity = loc.rule.heroLight ? 40 : 0;
+    heroLight.intensity = loc.rule?.heroLight ? 40 : 0;
     if (bloom) bloom.intensity = loc.bloom ?? 1.1; // bright scenes (snow) would wash out
+  }
+
+  async function setLocation(loc, layout) {
+    newLevel(loc);
 
     const outer = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshLambertMaterial({ color: new THREE.Color(loc.ground).multiplyScalar(0.78) }));
     outer.rotation.x = -Math.PI / 2; outer.position.y = -0.02; outer.receiveShadow = true;
@@ -265,7 +276,6 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
 
     const jobs = [];
     const flames = [];
-    occluders.length = 0;
     for (const o of layout.solids) {
       jobs.push(instance(o.kit, o.model, { ...o.fit, center: true }).then(({ obj }) => {
         obj.position.set(o.x, 0, o.z); obj.rotation.y = o.rot; level.add(obj);
@@ -288,6 +298,193 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     await Promise.all(Object.values(ENEMY_TYPES).flatMap((t) => t.model).map((m) => loadModel(kitFor(m), m)));
   }
 
+  // ---------- story zones ----------
+  // Grass with the roads painted on (one canvas texture) and a darker rim out to the fog.
+  function zoneGround(area) {
+    const { W, D } = area.size, N = 1024, c = document.createElement('canvas');
+    c.width = c.height = N;
+    const g = c.getContext('2d'), sx = N / (W * 2), sz = N / (D * 2);
+    const base = new THREE.Color(area.ground), road = new THREE.Color(area.road);
+    g.fillStyle = `#${base.getHexString()}`;
+    g.fillRect(0, 0, N, N);
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    g.globalAlpha = 0.35;
+    for (let i = 0; i < 260; i++) { // soft lighter and darker patches
+      g.fillStyle = `#${base.clone().multiplyScalar(0.88 + rnd() * 0.24).getHexString()}`;
+      g.beginPath(); g.arc(rnd() * N, rnd() * N, 10 + rnd() * 40, 0, Math.PI * 2); g.fill();
+    }
+    g.lineCap = g.lineJoin = 'round';
+    for (const [w, col, a] of [[4, base.clone().lerp(road, 0.5), 0.6], [3, road, 1]]) {
+      g.strokeStyle = `#${col.getHexString()}`; g.globalAlpha = a; g.lineWidth = w * sx;
+      for (const line of area.roads) {
+        g.beginPath();
+        line.forEach(([x, z], i) => g[i ? 'lineTo' : 'moveTo']((x + W) * sx, (z + D) * sz));
+        g.stroke();
+      }
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W * 2, D * 2), new THREE.MeshLambertMaterial({ map: tex }));
+    const rim = new THREE.Mesh(new THREE.PlaneGeometry(W * 2 + 140, D * 2 + 140), new THREE.MeshLambertMaterial({ color: base.clone().multiplyScalar(0.8) }));
+    for (const m of [floor, rim]) { m.rotation.x = -Math.PI / 2; m.receiveShadow = true; }
+    rim.position.y = -0.02;
+    return [rim, floor];
+  }
+
+  let markTex = null; // the quest giver's «!»
+  function questMark() {
+    if (!markTex) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 128;
+      const g = c.getContext('2d');
+      g.fillStyle = '#ffd34d'; g.strokeStyle = '#14182b'; g.lineWidth = 10;
+      g.beginPath(); g.arc(64, 64, 52, 0, Math.PI * 2); g.fill(); g.stroke();
+      g.fillStyle = '#14182b'; g.font = '900 84px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('!', 64, 70);
+      markTex = new THREE.CanvasTexture(c);
+      markTex.colorSpace = THREE.SRGBColorSpace;
+    }
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: markTex, depthWrite: false }));
+    m.scale.setScalar(0.5); m.position.y = 1.85; m.visible = false;
+    return m;
+  }
+
+  async function villagerView(v) {
+    const h = await instance('heroes', v.model, { height: 1.3 });
+    for (const side of ['handslotl', 'handslotr']) for (const c of h.inner.getObjectByName(side)?.children ?? []) c.visible = !!v.hold?.includes(c.name);
+    if (v.tint) {
+      const tint = new THREE.Color(v.tint);
+      h.inner.traverse((m) => { if (m.isMesh && !/handslot/.test(m.parent?.name ?? '')) { m.material = m.material.clone(); m.material.color.multiply(tint); } });
+    }
+    const mark = questMark();
+    h.obj.add(mark);
+    h.obj.position.set(v.x, 0, v.z); h.obj.rotation.y = v.facing;
+    const vw = { obj: h.obj, mixer: new THREE.AnimationMixer(h.inner), animations: h.animations, mark, face: v.facing };
+    animate(vw, 'Idle', 0);
+    vw.mixer.update(Math.random() * 2); // idles out of step
+    return vw;
+  }
+
+  // A crystal shard: a glowing gem over a ring, with a beam that shows it from afar.
+  function shardView() {
+    const group = new THREE.Group();
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), new THREE.MeshStandardMaterial({ color: 0x9ff6ff, emissive: 0x38d8ff, emissiveIntensity: 1.4, roughness: 0.15, metalness: 0.2, flatShading: true }));
+    gem.scale.y = 1.6;
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 4, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0x7ff3ff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false }));
+    beam.position.y = 2;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.55, 28), new THREE.MeshBasicMaterial({ color: 0x7ff3ff, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04;
+    group.add(gem, beam, ring);
+    group.visible = false;
+    return { group, gem, ring };
+  }
+
+  // A zone of the story's island: ground and roads, props (with colliders in the simulation), scenery
+  // around the edge, villagers, the campfire's flames and the shard.
+  async function setZone(area) {
+    newLevel(area);
+    zoneOn = area;
+    level.add(...zoneGround(area));
+    const sv = storyV = { villagers: new Map(), targets: null, targetViews: [], shard: shardView() };
+    const jobs = [];
+    for (const e of area.props) {
+      const o = solidFrom(area.kit, e);
+      jobs.push(instance(o.kit, o.model, { ...o.fit, center: true }).then(({ obj }) => {
+        obj.position.set(o.x, 0, o.z); obj.rotation.y = o.rot; level.add(obj);
+        if (o.h > 1.2) addOccluder(obj, o.x, o.z, solidExtent(o));
+      }));
+    }
+    for (const [m, x, z, rot, size] of area.scenery) {
+      const [kit, model] = m.startsWith('@') ? m.slice(1).split('/') : [area.kit, m];
+      jobs.push(instance(kit, model, { ...(typeof size === 'object' ? { height: size.h } : { r: size / 2 }), center: true }).then(({ obj }) => {
+        obj.position.set(x, 0, z); obj.rotation.y = (rot * Math.PI) / 180; level.add(obj);
+      }));
+    }
+    for (const v of area.villagers) jobs.push(villagerView(v).then((vw) => { sv.villagers.set(v.id, vw); level.add(vw.obj); }));
+    jobs.push(loadModel('hex', 'target'));
+    await Promise.all(jobs);
+    level.add(sv.shard.group);
+    fx.setFlames([{ x: area.campfire.x, y: 0.28, z: area.campfire.z, scale: 1.5 }]);
+    scene.add(level);
+    await Promise.all(Object.values(ENEMY_TYPES).flatMap((t) => t.model).map((m) => loadModel(kitFor(m), m)));
+  }
+
+  function syncStory(g, dt) {
+    const sv = storyV;
+    if (!sv) return;
+    for (const s of g.villagers) {
+      const v = sv.villagers.get(s.id);
+      if (!v) continue;
+      v.mark.visible = s.quest;
+      v.mark.position.y = 1.85 + Math.sin(g.time * 3) * 0.06;
+      v.face += angleTo(v.face, s.look ?? s.facing) * (1 - Math.exp(-6 * dt)); // turns to the hero nearby
+      v.obj.rotation.y = v.face;
+    }
+    if (sv.targets !== g.targets) { // a new set of targets: build their views
+      for (const t of sv.targetViews) level.remove(t.obj);
+      const own = sv.targets = g.targets;
+      sv.targetViews = [];
+      for (const t of own) {
+        instance('hex', 'target', { height: 1.5, center: true }).then(({ obj }) => {
+          if (storyV !== sv || sv.targets !== own) return;
+          const pivot = new THREE.Group(); // tips over around its foot
+          pivot.rotation.order = 'YXZ';
+          pivot.add(obj);
+          pivot.position.set(t.x, 0, t.z); pivot.rotation.y = Math.atan2(heroPos.x - t.x, heroPos.z - t.z);
+          level.add(pivot);
+          sv.targetViews.push({ obj: pivot, t });
+        });
+      }
+    }
+    for (const tv of sv.targetViews) {
+      const t = tv.t;
+      if (!t.hit) continue;
+      const k = Math.min(1, t.t / 0.35);
+      tv.obj.rotation.x = -(Math.PI / 2) * k * k; // falls away from the hero
+      tv.obj.position.y = -Math.max(0, t.t - 1.2) * 1.2;
+      tv.obj.visible = t.t < 2.4;
+    }
+    const sh = sv.shard;
+    sh.group.visible = !!g.shard;
+    if (g.shard) {
+      sh.group.position.set(g.shard.x, 0, g.shard.z);
+      sh.gem.position.y = 0.75 + Math.sin(g.time * 2.5) * 0.12;
+      sh.gem.rotation.y += dt * 1.8;
+      sh.ring.scale.setScalar(1 + Math.sin(g.time * 5) * 0.1);
+    }
+    if (hero) hero.obj.visible = !(g.hurtT > 0 && !g.over) || Math.floor(g.time * 14) % 2 === 0; // blinks while safe after a hit
+    // The sun's shadow box follows the hero around the big zone.
+    const [sx, sy, sz] = look.sunPos || [-6, 14, 6];
+    sun.position.set(g.hero.x + sx, sy, g.hero.z + sz);
+    sun.target.position.set(g.hero.x, 0, g.hero.z);
+  }
+
+  // The creator's outfit colors: the KayKit atlas recolored once per model, palette and skin tone.
+  const recolors = new Map();
+  // uvs: the texture coordinates of the meshes that wear it (the clothes' main color is read there).
+  function recolorMaterial(mat, { palette, skin }, uvs) {
+    const key = `${mat.uuid}:${palette.id}:${skin.id}`;
+    if (recolors.has(key)) return recolors.get(key);
+    let out = mat;
+    const src = mat.map;
+    if (src?.image && (palette.hue !== undefined || skin.light !== 1)) {
+      const N = 512, c = document.createElement('canvas');
+      c.width = c.height = N;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(src.image, 0, 0, N, N);
+      const d = ctx.getImageData(0, 0, N, N);
+      recolorPixels(d.data, palette, skin, mainClothHue(d.data, N, uvs));
+      ctx.putImageData(d, 0, 0);
+      const tex = new THREE.CanvasTexture(c);
+      for (const k of ['flipY', 'colorSpace', 'wrapS', 'wrapT', 'magFilter', 'minFilter']) tex[k] = src[k];
+      out = mat.clone();
+      out.map = tex;
+    }
+    recolors.set(key, out);
+    return out;
+  }
+
   // ---------- hero ----------
   async function setHero(def) {
     heroDef = def;
@@ -305,8 +502,13 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
         if (c.visible && /Staff|Wand/.test(c.name)) staff = c;
       }
     }
-    const S = SKINS[gear.skin], W = WEAPONS[gear.weapon];
-    if (S) { // one restyled body material for the whole hero (all KayKit parts share one atlas material)
+    const S = def.recolor ? null : SKINS[gear.skin], W = WEAPONS[gear.weapon];
+    if (def.recolor) {
+      const body = [];
+      h.inner.traverse((m) => { if (m.isMesh && !/handslot/.test(m.parent?.name ?? '')) body.push(m); });
+      const uvs = body.flatMap((m) => Array.from(m.geometry.attributes.uv?.array ?? []));
+      for (const m of body) m.material = recolorMaterial(m.material, def.recolor, uvs);
+    } else if (S) { // one restyled body material for the whole hero (all KayKit parts share one atlas material)
       let bodyMat = null;
       h.inner.traverse((m) => { if (m.isMesh && !/handslot/.test(m.parent?.name ?? '')) { bodyMat ??= lookMaterial(m.material, S); m.material = bodyMat; if (S.shadow === false) m.castShadow = false; } });
     } else if (def.tint) {
@@ -464,6 +666,12 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     } else if (t === 'drop') fx.burst('dust', ev.x, 0.05, ev.z, 0x6e6252);
     else if (t === 'recall') { fx.burst('ring', ev.x, 0.6, ev.z, c); kick(0.15); }
     else if (t === 'spawn' && !ev.flying) { fx.burst('dust', ev.x, 0.05, ev.z, 0x6e6252); decal(ev.x, ev.z); }
+    else if (t === 'hit') { fx.burst('big', ev.x, 0.9, ev.z, 0xff4d4d); kick(0.5); }
+    else if (t === 'faint') { fx.burst('big', ev.x, 0.8, ev.z, 0xff4d4d); kick(0.6); }
+    else if (t === 'heal') fx.burst('ring', ev.x, 0.9, ev.z, 0x7ee07a);
+    else if (t === 'wake') fx.burst('ring', ev.x, 0.6, ev.z, 0xffd34d);
+    else if (t === 'target') { fx.burst('hit', ev.x, 1.0, ev.z, 0xffd34d); kick(0.25); }
+    else if (t === 'shard') { fx.burst('big', ev.x, 0.8, ev.z, 0x7ff3ff); kick(0.3); }
     else if (t === 'shoot') {
       shootT = SHOOT_T;
       shotFace = ev.tx !== undefined ? Math.atan2(ev.tx - ev.x, ev.tz - ev.z) : null;
@@ -628,6 +836,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
         continue;
       }
       if (!v) continue;
+      if (e.dead && e.vanish) { level.remove(v.obj); enemyViews.delete(e.id); continue; }
       if (e.dead) {
         const kn = v.knock || { x: Math.sin(e.facing + Math.PI), z: Math.cos(e.facing + Math.PI), big: false };
         const big = kn.big && !!THREE.AnimationClip.findByName(v.animations, 'Death_C_Skeletons');
@@ -683,11 +892,12 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     syncEnemies(g, dt);
     if (proj) syncProjectile(g, dt);
     syncZone(g, dt);
+    if (g.mode === 'story') syncStory(g, dt);
   }
 
   // ---------- camera ----------
   const PITCH = THREE.MathUtils.degToRad(58);
-  let menu = false;      // false | 'menu' (orbit around the hero in the arena) | 'showcase' (hero close-up) | 'shop'
+  let menu = false;      // false | 'menu' (orbit around the hero in the arena) | 'showcase' (hero close-up) | 'shop' | 'creator'
   let view = 'tps';      // 'tps' (behind the shoulder) | 'top' (whole arena from above)
   let yaw = 0;           // third-person camera heading; 0 looks toward −z
   let shootT = 0;
@@ -708,7 +918,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     if (menu) {
       // [distance, camera height, look-at height]: the close-ups aim low so the hero sits above the
       // screen's bottom card (the shop's card is taller, so it aims lower still).
-      const [r, hgt, look] = menu === 'shop' ? [5.0, 1.0, -0.95] : menu === 'showcase' ? [4.2, 1.25, 0.25] : [7.5, 3.6, 1.1];
+      const [r, hgt, look] = menu === 'shop' ? [5.0, 1.0, -0.95] : menu === 'creator' ? [4.15, 1.0, -0.6] : menu === 'showcase' ? [4.2, 1.25, 0.25] : [7.5, 3.6, 1.1];
       camera.position.set(heroPos.x + Math.sin(menuSpin) * r, hgt, heroPos.z + Math.cos(menuSpin) * r);
       camera.lookAt(heroPos.x, look, heroPos.z);
       return;
@@ -772,10 +982,11 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     if (menu) {
       menuSpin += dt * (menu === 'menu' ? 0.12 : 0.35);
       placeCamera();
-      if (hero) { hero.obj.position.copy(heroPos); hero.obj.rotation.y = menuSpin + Math.PI * 0.15; hero.mixer.update(dt); fx.moveAura(heroPos.x, 0.75, heroPos.z, true); }
+      if (hero) { hero.obj.visible = true; hero.obj.position.copy(heroPos); hero.obj.rotation.y = menuSpin + Math.PI * 0.15; hero.mixer.update(dt); fx.moveAura(heroPos.x, 0.75, heroPos.z, true); }
       if (proj && orbit && menu === 'shop') previewOrbit(dt);
       fadeOccluders(dt);
     } else if (view !== 'tps') placeCamera(); // re-placed every frame so the shake never adds up
+    if (storyV) for (const v of storyV.villagers.values()) v.mixer.update(dt);
     shake(dt);
     adaptResolution(dt);
     fx.update(dt);
@@ -853,11 +1064,12 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   }
 
   // Drop everything left over from the previous run (enemy ids restart at 1 in a new game).
-  function clearRun() {
+  // at: where the hero starts (default: the arena's start spot).
+  function clearRun(at = null) {
     for (const v of enemyViews.values()) level?.remove(v.obj);
     for (const d of dying) level?.remove(d.view.obj);
     enemyViews.clear(); dying.length = 0; pending.clear();
-    heroPos.set(0, 0, 3); pivot.copy(heroPos);
+    heroPos.set(at?.x ?? 0, 0, at?.z ?? 3); pivot.copy(heroPos);
     heroFace = Math.PI; trauma = 0; shootT = 0;
     for (const m of decals) m.visible = false;
     zone.visible = false; zone.userData.x = NaN;
@@ -888,5 +1100,5 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     if (proj) proj.group.visible = proj.ring.visible = proj.beacon.visible = false;
   }
 
-  return { setLocation, setHero, sync, render, resize, effect, screenToGround, worldToScreen, setMenu, setView, clearRun, setAim, renderer, setGear, presetGear };
+  return { setLocation, setZone, setHero, sync, render, resize, effect, screenToGround, worldToScreen, setMenu, setView, clearRun, setAim, renderer, setGear, presetGear };
 }
