@@ -33,3 +33,7 @@ All art assets are licensed **CC0 1.0** (public domain; credit not required). Li
 - postprocessing 6.39.5 (bloom, vignette) — `vendor/POSTPROCESSING-LICENSE.md`
 
 Sound effects are synthesized in code (`src/audio.js`).
+
+**Claude Code skills and agents** (`.claude/skills/`, `.claude/agents/`, MIT License)
+
+- Claude Code Game Studios by Donchitos — https://github.com/Donchitos/claude-code-game-studios, release 1.1.3 (commit be8993b). 73 skills and 49 agents, copied unchanged except that `code-review`, `help` and `settings` were renamed `studio-code-review`, `studio-help` and `studio-settings` (they clash with built-in commands). The `hotfix` skill, the pack's hooks, scripts and `.claude/docs/` were not installed. Licence text: `.claude/LICENSE-claude-code-game-studios.txt`.
