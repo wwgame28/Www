@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "mcp__github__search_repositories",
+      "mcp__TinyFish__fetch_content",
+      "mcp__github__pull_request_read",
+      "mcp__github__list_pull_requests",
+      "mcp__TinyFish__search",
+      "WebFetch",
+      "mcp__github__get_file_contents",
+      "mcp__claude-code-remote__read_documentation"
+    ]
+  }
+}
