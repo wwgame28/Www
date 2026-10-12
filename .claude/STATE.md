@@ -1,15 +1,10 @@
-# State — 2026-10-11
-Goal: «Рикошет» — 3D web arcade for iPhone (one projectile you must retrieve), in the repo root (served by GitHub Pages at https://wwgame28.github.io/Www/).
-Done: v1.3 heroes (7), skeleton enemies, 7 locations, three.quarks/bloom/water effects, portrait lock prompt. v1.2 third-person view (default; top-down in settings) with KayKit skinned characters. v1.1 added fixed joystick, hold-to-aim trajectory line, perk choice after each wave. spec `docs/superpowers/specs/2026-10-11-ricochet-design.md`; v1 playable (7 weapons, 4 locations, 5 enemy types, daily seed, challenge links, records); Kenney CC0 assets in `assets/`.
-Checks passed: `node --test tests/*.test.mjs` → 28/28 (incl. asset-existence + syntax checks); Playwright iPhone 14: all 7 heroes on the heroes screen, every location played with a shot, TPS controls, top-down perks, rotate prompt, legacy save migration — 0 console errors. Software GL runs ~3 fps, so real-device performance is unmeasured.
-Next: (1) Design review part 2 — run docs/design-review/workflow-part2.js via Workflow with args {previous: docs/design-review/2026-10-11-reports-part1.json} (5 specialists left: animation, levels, balance w/ bots, UI, perf + synthesis). (2) Implement part-1 top items (docs/design-review/2026-10-11-interim.md): camera reframe ~33° pitch, soft-lock aim, fire cancel, stick dead zone/semi-floating, pickup vacuum+beacon, upper/lower-body throw layer, phase-synced crossfades. (3) Owner tests on iPhone; hosting via PRs the owner merges.
-Gotchas: GLTFLoader strips '.' from node names (handslot.r -> handslotr). Workflow concurrency here is 2 agents (4 CPUs). three.js fadeIn(0) leaves skinned rigs in T-pose — render.animate() handles fade 0 explicitly. KayKit GLBs were pruned with glTF-Transform (dispose samplers explicitly, then orphan accessors). container network blocks kenney.nl — assets come as uploads; 3 uploads were truncated, files salvaged by CRC. Walk Wars removed from the tree (in git history, commit b973256).
-
-## Status 2026-10-11
-- PR 7 (game feel, spec v1.4) done: render/input/audio/main + src/aim.js, tests/feel.test.mjs. Checked in headless iPhone Chromium for all 7 heroes, both views: no errors.
-- Design review: Animation + Locations reports in docs/design-review/2026-10-11-reports-part2.json. Combat & balance, UI & menus, iPhone perf and Lead designer failed on the usage limit; rerun only those (workflow-part2.js).
-- Not done from the reports: additive Hit_B flinch, ribbon trail, explosion radius ring, «Тряска экрана» toggle, one-handed mode, perimeter dressing.
-- PR 8 (spec v1.5, locations) is in the same PR #7: src/solid.js, src/footprints.js (regenerate with scratchpad lvl/genfoot.mjs), hand-made layouts and `look` in locations.js, tests/layout.test.mjs.
-- Next: the four remaining design reviews (balance, UI, iPhone perf, lead designer), then their fixes.
-- PR #7 (game feel + locations) is merged. Shop design drafts (stopped early by the owner) are in docs/design-review/2026-10-12-shop/: catalog of 15 cosmetics with a prototype and screenshots, economy bot numbers; the UI and tech-lead parts were not done.
-- v1.6 (spec): shop with 15 cosmetics + coins, trick shots, golden zone, recall ↩ — in the PR after #7. Open: the stone mage scores 3–6× the other heroes (economy bot, docs/design-review/2026-10-12-shop/); the 1 000-coin cap per run limits its effect on the shop.
+# State — 2026-10-12
+Goal: «Рикошет» — 3D web game for iPhone (arcade + open-world story «Приключение»), GitHub Pages https://wwgame28.github.io/Www/, branch claude/context-optimizer-plugin-569iyo, owner merges PRs.
+Done:
+- Story v2: village + 7 kingdoms + caves (src/story/zones/*), queens, gems, blessings, bosses, hazards; scene.js renders zones; HUD (boss bar, cold/heat, ⚡ dash, island map, gift cards, ending). PR #10 merged.
+- Portrait lock (src/orient.js) + 16 ⭐ errands, «Летопись» (src/story/chronicle.js, 37 pages, 10 scrolls), timed steps — PR #11 open (commits a5eca90, 9ec3fa1).
+- Lore: docs/superpowers/specs/2026-10-12-seven-crowns-lore.md, 2026-10-12-universe-lore.md.
+- Workflow wf_e71384de-6ec (research: mechanics, VFX, assets, story, bugs, balance → plan); reports in scratchpad/research/.
+Next: review the plan, run the implementation workflow (sequential packages, tests green, local commits), then push + PR.
+Checks passed: node --test tests/*.test.mjs → 98/98 on 9ec3fa1; bot: all main lines × 7 weapons, all errands × 7 weapons; Playwright iPhone 14 (portrait + landscape): no page errors.
+Gotchas: headless Chromium uses software GL (very slow: click #dialog via DOM, not page.click). Story recall cooldown 4 s; lineOf picks the first open line per zone (side lines after the main one; village errands after the finale in LINES order). Assets: KayKit from GitHub (add_repo first), Kenney kits came as owner uploads; licences CC0. Never use paid TinyFish tools.
