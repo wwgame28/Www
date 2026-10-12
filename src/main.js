@@ -16,21 +16,24 @@ import { getWeapon } from './weapons.js';
 import { createWorld, stepWorld, nextLine, DASH } from './story/world.js';
 import { ZONES } from './story/zones/index.js';
 import { GEMS, getGem, getBlessing } from './story/data.js';
-import { taskOf, repairHero } from './story/quests.js';
+import { taskOf, repairHero, getLine } from './story/quests.js';
+import { openPages } from './story/chronicle.js';
 import { heroDef } from './story/hero.js';
-import { renderCreator, renderHearts, chapterCard, giftCard, renderMap } from './story/ui.js';
+import { renderCreator, renderHearts, chapterCard, giftCard, renderMap, renderChronicle, showPage } from './story/ui.js';
+import { updateOrientation, toLocal, size, turned } from './orient.js';
 
+updateOrientation(); // a phone held sideways: the game turns back upright before anything is laid out
 const STEP = 1 / 60;
 const data = progress.load();
 const audio = createAudio();
 const canvas = $('game');
 const centerOf = (id) => () => {
   const r = $(id).getBoundingClientRect();
-  return r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+  return r.width ? toLocal(r.left + r.width / 2, r.top + r.height / 2) : null;
 };
 let storyOn = false; // «Приключение» is on: always third person (the top view only fits the arcade)
 const viewMode = () => (!storyOn && data.settings.view === 'top' ? 'top' : 'tps'); // third person by default
-const input = createInput(canvas, { stickCenter: centerOf('stick'), fireCenter: centerOf('fireBtn'), recallCenter: centerOf('recallBtn'), mode: viewMode });
+const input = createInput(canvas, { stickCenter: centerOf('stick'), fireCenter: centerOf('fireBtn'), recallCenter: centerOf('recallBtn'), mode: viewMode, toLocal, size });
 document.body.classList.toggle('stick-right', !!data.settings.stickRight);
 document.body.classList.toggle('tps', viewMode() === 'tps');
 const view = createRenderer(canvas, { quality: data.settings.quality });
@@ -174,7 +177,7 @@ function pause() {
   if (mode !== 'playing') return;
   mode = 'paused';
   input.setEnabled(false);
-  if (game.mode === 'story') renderMap({ ...game.story, zone: game.area.id }, game.area.id);
+  if (game.mode === 'story') { renderMap({ ...game.story, zone: game.area.id }, game.area.id); markUnread(); }
   show('pause');
 }
 
@@ -326,13 +329,13 @@ function updateHud() {
 // An arrow at the screen edge toward an off-screen point (s: worldToScreen result; null hides it).
 function pointAt(el, s) {
   if (!s || s.inside) { el.style.display = 'none'; return; }
-  const w = innerWidth, h = innerHeight, cx = w / 2, cy = h / 2;
+  const { w, h } = size(), cx = w / 2, cy = h / 2;
   const a = Math.atan2(s.y - cy, s.x - cx);
   const m = 36;
   const k = Math.min((w / 2 - m) / Math.abs(Math.cos(a) || 1e-6), (h / 2 - m) / Math.abs(Math.sin(a) || 1e-6));
   el.style.display = 'block';
   el.style.left = `${cx + Math.cos(a) * k - 12}px`;
-  el.style.top = `${Math.min(innerHeight - 260, cy + Math.sin(a) * k) - 11}px`; // above the stick and fire button
+  el.style.top = `${Math.min(h - 260, cy + Math.sin(a) * k) - 11}px`; // above the stick and fire button
   el.style.transform = `rotate(${a + Math.PI / 2}rad)`;
 }
 
@@ -570,7 +573,8 @@ let dashPress = false;   // ⚡ was tapped
 let draft = null;        // the creator's choices while it is open
 let creatorFirst = false; // the first visit: its button starts the adventure
 let creatorTab = 'look';
-const storyHud = { hearts: -1, task: '', boss: '', temp: -1, dash: -1 };
+const storyHud = { hearts: -1, task: '', boss: '', temp: -1, dash: -1, time: -1 };
+let knownPages = null; // the «Летопись» pages open so far (new ones get a toast)
 const defaultLook = () => ({ base: 'Rogue_Hooded', palette: 'forest', skin: 'medium', weapon: 'ricochet', name: 'Герой' });
 
 let storyLoading = false;
@@ -603,7 +607,8 @@ async function openZone(id, arrive) {
   const look = data.story.hero || defaultLook();
   game = createWorld({ zoneId: id, story: data.story, weaponId: look.weapon, heroName: look.name, arrive });
   view.clearRun(game.hero);
-  Object.assign(storyHud, { hearts: -1, task: '', boss: '', temp: -1, dash: -1 });
+  Object.assign(storyHud, { hearts: -1, task: '', boss: '', temp: -1, dash: -1, time: -1 });
+  knownPages ??= new Set(openPages(data.story).map((p) => p.id));
 }
 
 // Through a gate into the next kingdom (the progress is saved first).
@@ -625,8 +630,12 @@ async function travel(to, arrive) {
 function saveStory() {
   const s = game?.story;
   if (!s) return;
-  data.story = { ...data.story, zone: game.area.id, flags: [...s.flags], gems: [...s.gems], blessings: [...s.blessings], lines: { ...s.lines }, done: [...s.done], drop: s.drop ?? null };
+  data.story = { ...data.story, zone: game.area.id, flags: [...s.flags], gems: [...s.gems], blessings: [...s.blessings], lines: { ...s.lines }, done: [...s.done], drop: s.drop ?? null, scrolls: [...(s.scrolls || [])] };
   progress.save(data);
+  // New pages of the «Летопись» (from a line done or a scroll found).
+  const fresh = openPages(data.story).filter((p) => !knownPages?.has(p.id));
+  for (const p of fresh) knownPages?.add(p.id);
+  if (fresh.length) toast(fresh.length > 1 ? `📜 В Летописи новые страницы: ${fresh.length}` : `📜 Новая страница Летописи: «${fresh[0].title}»`);
 }
 
 function leaveStory() {
@@ -696,6 +705,13 @@ function updateStoryHud() {
       $('tempFill').style.width = `${temp * 100}%`;
     }
   }
+  const sec = Math.ceil(g.stepT || 0);
+  if (storyHud.time !== sec) {
+    storyHud.time = sec;
+    const el = $('timer');
+    el.classList.toggle('on', sec > 0); el.classList.toggle('low', sec > 0 && sec <= 10);
+    el.textContent = `⏱ ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+  }
   const dash = g.blessed('dash') ? Math.ceil((g.dashCd / DASH.cooldown) * 20) / 20 : -1;
   if (storyHud.dash !== dash) {
     storyHud.dash = dash;
@@ -734,13 +750,34 @@ function showEnding() {
 }
 $('endingBtn').addEventListener('click', () => { audio.play({ type: 'click' }); resume(); });
 
+// The «Летопись» (from the pause): open pages to read, closed ones say how to open them.
+const bookStory = () => (game?.mode === 'story' ? { ...data.story, done: game.story.done, scrolls: game.story.scrolls } : data.story);
+function markUnread() {
+  const read = data.story.read || [];
+  $('chronBtn').classList.toggle('fresh', openPages(bookStory()).some((p) => !read.includes(p.id)));
+}
+function openBook() {
+  $('chronicle').classList.remove('reading');
+  renderChronicle(bookStory(), (p) => {
+    audio.play({ type: 'click' });
+    data.story.read = [...new Set([...(data.story.read || []), p.id])];
+    progress.save(data);
+    showPage(p);
+  });
+  show('chronicle');
+}
+$('chronBtn').addEventListener('click', () => { audio.play({ type: 'click' }); openBook(); });
+$('chronBack').addEventListener('click', () => { audio.play({ type: 'click' }); openBook(); });
+$('chronClose').addEventListener('click', () => { audio.play({ type: 'click' }); markUnread(); show('pause'); });
+
 function storyEvent(ev) {
   const at = (y = 1.6) => view.worldToScreen(ev.x ?? game.hero.x, y, ev.z ?? game.hero.z);
   const pop = (text, cls = 'combo', y = 1.6) => { const s = at(y); popup(s.x, s.y, text, cls); };
   switch (ev.type) {
     case 'stepStart':
       if (ev.banner) banner(ev.banner);
-      if (ev.hint) toast(ev.hint);
+      if (ev.side && ev.first) toast('⭐ Новое поручение! Его можно выполнить и позже');
+      else if (ev.hint) toast(ev.hint);
       break;
     case 'talk': audio.play({ type: 'click' }); showLine(); break;
     case 'talkEnd': showLine(); break;
@@ -758,8 +795,15 @@ function storyEvent(ev) {
       audio.play({ type: 'waveClear' });
       slowMo(0.5, 0.5);
       if (ev.ending) setTimeout(showEnding, 1200);
+      else if (getLine(ev.id)?.side) giftCard({ head: '⭐ Поручение выполнено!', title: ev.title, note: '📜 В Летописи — новая страница' });
       else giftCard({ title: ev.title, gem: getGem(ev.gem), blessing: getBlessing(ev.blessing) });
       break;
+    case 'scroll':
+      pop('📜', 'combo c3', 1.4);
+      banner(ev.all ? 'Все свитки найдены! Ты — Летописец' : `Свиток ${ev.found} из ${ev.of}`);
+      audio.play({ type: 'waveClear' });
+      break;
+    case 'timeUp': banner('Время вышло! Ещё раз'); audio.play({ type: 'hurt' }); break;
     case 'hit':
       audio.play({ type: 'hurt' }); freeze(0.06);
       if (ev.why === 'cold' || ev.why === 'heat') pop(ev.why === 'cold' ? 'Холодно!' : 'Жарко!', 'trick', 2);
@@ -892,14 +936,17 @@ toggle('aimToggle', data.settings.aimAssist !== false, (v) => { data.settings.ai
 toggle('stickToggle', !!data.settings.stickRight, (v) => { data.settings.stickRight = v; document.body.classList.toggle('stick-right', v); });
 toggle('qualityToggle', data.settings.quality === 'high', (v) => { data.settings.quality = v ? 'high' : 'low'; toast('Применится после перезапуска'); });
 
-addEventListener('resize', () => view.resize());
+const relayout = () => { updateOrientation(); view.resize(); };
+addEventListener('resize', relayout);
+addEventListener('orientationchange', relayout);
 addEventListener('hashchange', () => { challenge = challengeFromHash(location.hash); if (mode === 'menu') refreshMenu(); });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { pause(); audio.suspend(); } else { audio.resume(); last = performance.now(); }
 });
-// Portrait only: turning the phone sideways shows the #rotate prompt (CSS) and pauses the run.
+// Portrait only. A phone turned sideways keeps the game upright (orient.js); elsewhere (a short
+// desktop window) the #rotate prompt covers the game (CSS) and the run pauses.
 const landscape = matchMedia('(orientation: landscape) and (max-height: 520px)');
-landscape.addEventListener('change', (e) => { if (e.matches) pause(); });
+landscape.addEventListener('change', (e) => { relayout(); if (e.matches && !turned()) pause(); });
 
 view.resize();
 requestAnimationFrame(frame);

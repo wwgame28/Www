@@ -14,7 +14,9 @@ const EDGE_PX = 28;   // a turning finger held this close to a screen edge keeps
 // Turning gets faster with finger speed: precise when slow, a quick flick turns around.
 const LOOK_SLOW = 0.005, LOOK_FAST = 0.011; // rad per px at ≤ 400 px/s and ≥ 1600 px/s
 
-export function createInput(el, { stickCenter, fireCenter, recallCenter = () => null, mode }) {
+// toLocal maps a touch's screen point into the game's frame and size() gives that frame (they differ
+// from the screen while orient.js keeps the game upright on a phone turned sideways).
+export function createInput(el, { stickCenter, fireCenter, recallCenter = () => null, mode, toLocal = (x, y) => ({ x, y }), size = () => ({ w: innerWidth, h: innerHeight }) }) {
   const touches = new Map(); // free touches: { x, y, x0, t0, tm }
   let stick = null;          // { id, x0, y0, x, y } — x0/y0 is the fixed center
   let fire = null;           // { id, t0, tm, x, x0, y0, cancel } — third-person fire button
@@ -23,7 +25,8 @@ export function createInput(el, { stickCenter, fireCenter, recallCenter = () => 
   let recallId = null, recalls = 0; // top-down ↩ button
   let enabled = false;
 
-  const near = (c, e, r) => c && Math.hypot(e.clientX - c.x, e.clientY - c.y) < r;
+  const at = (e) => toLocal(e.clientX, e.clientY);
+  const near = (c, q, r) => c && Math.hypot(q.x - c.x, q.y - c.y) < r;
   function turn(dx, now, before) {
     const k = Math.min(1, Math.max(0, (Math.abs(dx) / Math.max(1e-3, (now - before) / 1000) - 400) / 1200));
     look += dx * (LOOK_SLOW + (LOOK_FAST - LOOK_SLOW) * k * k * (3 - 2 * k));
@@ -33,32 +36,32 @@ export function createInput(el, { stickCenter, fireCenter, recallCenter = () => 
     if (!enabled) return;
     e.preventDefault();
     el.setPointerCapture?.(e.pointerId);
-    const now = performance.now();
-    if (!stick && near(stickCenter(), e, STICK_PX * ZONE)) {
+    const now = performance.now(), q = at(e);
+    if (!stick && near(stickCenter(), q, STICK_PX * ZONE)) {
       const c = stickCenter();
-      stick = { id: e.pointerId, x0: c.x, y0: c.y, x: e.clientX, y: e.clientY };
+      stick = { id: e.pointerId, x0: c.x, y0: c.y, x: q.x, y: q.y };
       return;
     }
-    if (mode() !== 'tps' && near(recallCenter(), e, 56)) { recallId = e.pointerId; return; }
-    if (mode() === 'tps' && !fire && near(fireCenter(), e, FIRE_GRAB)) {
-      fire = { id: e.pointerId, t0: now, tm: now, x: e.clientX, x0: e.clientX, y0: e.clientY, cancel: false };
+    if (mode() !== 'tps' && near(recallCenter(), q, 56)) { recallId = e.pointerId; return; }
+    if (mode() === 'tps' && !fire && near(fireCenter(), q, FIRE_GRAB)) {
+      fire = { id: e.pointerId, t0: now, tm: now, x: q.x, x0: q.x, y0: q.y, cancel: false };
       return;
     }
-    touches.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, t0: now, tm: now });
+    touches.set(e.pointerId, { x: q.x, y: q.y, x0: q.x, t0: now, tm: now });
   };
   const move = (e) => {
-    const now = performance.now();
-    if (stick && stick.id === e.pointerId) { stick.x = e.clientX; stick.y = e.clientY; return; }
+    const now = performance.now(), q = at(e);
+    if (stick && stick.id === e.pointerId) { stick.x = q.x; stick.y = q.y; return; }
     if (fire && fire.id === e.pointerId) {
-      turn(e.clientX - fire.x, now, fire.tm);
-      fire.x = e.clientX; fire.tm = now;
-      fire.cancel = e.clientY - fire.y0 > CANCEL_PX;
+      turn(q.x - fire.x, now, fire.tm);
+      fire.x = q.x; fire.tm = now;
+      fire.cancel = q.y - fire.y0 > CANCEL_PX;
       return;
     }
     const t = touches.get(e.pointerId);
     if (!t) return;
-    if (mode() === 'tps') turn(e.clientX - t.x, now, t.tm);
-    t.x = e.clientX; t.y = e.clientY; t.tm = now;
+    if (mode() === 'tps') turn(q.x - t.x, now, t.tm);
+    t.x = q.x; t.y = q.y; t.tm = now;
   };
   const up = (e) => {
     if (stick && stick.id === e.pointerId) { stick = null; return; }
@@ -67,7 +70,7 @@ export function createInput(el, { stickCenter, fireCenter, recallCenter = () => 
     const t = touches.get(e.pointerId);
     if (!t) return;
     touches.delete(e.pointerId);
-    if (mode() !== 'tps') fires.push({ x: e.clientX, y: e.clientY });
+    if (mode() !== 'tps') fires.push(at(e));
   };
   const cancel = (e) => {
     touches.delete(e.pointerId);
@@ -104,7 +107,7 @@ export function createInput(el, { stickCenter, fireCenter, recallCenter = () => 
       for (const p of [fire, ...touches.values()]) {
         if (!p || Math.abs(p.x - p.x0) < 12) continue;
         if (p.x < EDGE_PX) return -1;
-        if (p.x > innerWidth - EDGE_PX) return 1;
+        if (p.x > size().w - EDGE_PX) return 1;
       }
       return 0;
     },

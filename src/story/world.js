@@ -14,6 +14,7 @@ import { ZONES } from './zones/index.js';
 import { beginStep, completeStep, onEvent, stepOf, lineOf, say, meets, maxHearts } from './quests.js';
 import { ground, drift, portalJump, stepClimate, stepRockfall, inArea, gust } from './hazards.js';
 import { foeStep, makeBoss, bossBlocks, turnTo } from './foes.js';
+import { SCROLLS, SCROLL_REWARD } from './chronicle.js';
 
 const HERO_SPEED = 5.2;
 const HERO_R = 0.4;
@@ -48,7 +49,7 @@ const emit = (g, type, data = {}) => g.events.push({ type, ...data });
 export function createWorld({ zoneId = 'village', story, weaponId, heroName = 'Герой', arrive = null }) {
   const area = ZONES[zoneId] || ZONES.village;
   const s = { flags: [], gems: [], blessings: [], lines: {}, done: [], drop: null, ...story };
-  s.flags = [...s.flags]; s.gems = [...s.gems]; s.blessings = [...s.blessings]; s.lines = { ...s.lines }; s.done = [...s.done];
+  s.flags = [...s.flags]; s.gems = [...s.gems]; s.blessings = [...s.blessings]; s.lines = { ...s.lines }; s.done = [...s.done]; s.scrolls = [...(s.scrolls || [])];
   s.zone = area.id;
   const has = (b) => s.blessings.includes(b);
   const solids = zoneProps(area, s).map((e) => solidOf(area, e));
@@ -80,6 +81,8 @@ export function createWorld({ zoneId = 'village', story, weaponId, heroName = '�
     campfire: { ...area.campfire },
     targets: [], raid: null, items: [], camps: [], object: null, reach: null, advanceT: -1, lastKill: null, setup: null,
     lights: [], // lit lanterns and braziers: { x, z, warm }
+    scrolls: SCROLLS.filter((p) => p.unlock.scroll.zone === area.id).map((p) => ({ id: p.id, x: p.unlock.scroll.x, z: p.unlock.scroll.z, taken: s.scrolls.includes(p.id) })),
+    stepT: 0, // seconds left of a timed step (0: no timer)
     near: null, talk: null, // nearest villager in reach; the open dialogue { id, name, lines, i, quest, portrait, crest }
     story: s, glow: has('sun'), blessed: has,
   };
@@ -589,6 +592,21 @@ export function stepWorld(g, dt, input = {}) {
       emit(g, 'item', { x: it.x, z: it.z, kind: it.kind, left: g.items.filter((x) => !x.taken).length });
     }
     if (g.reach && Math.hypot(g.reach.x - h.x, g.reach.z - h.z) < g.reach.r) { g.reach = null; emit(g, 'reached', { x: h.x, z: h.z }); }
+    // A scroll of the «Летопись»: a page opens (all of them: a reward).
+    for (const sc of g.scrolls) {
+      if (sc.taken || Math.hypot(sc.x - h.x, sc.z - h.z) >= ITEM_R) continue;
+      sc.taken = true;
+      g.story.scrolls.push(sc.id);
+      const all = SCROLLS.every((p) => g.story.scrolls.includes(p.id));
+      emit(g, 'scroll', { x: sc.x, z: sc.z, id: sc.id, found: g.story.scrolls.length, of: SCROLLS.length, all });
+      if (all) emit(g, 'reward', { coins: SCROLL_REWARD });
+      emit(g, 'save');
+    }
+    // A timed step: out of time, it starts over.
+    if (g.stepT > 0 && !talking && g.advanceT < 0) {
+      g.stepT = Math.max(0, g.stepT - dt);
+      if (g.stepT === 0) { emit(g, 'timeUp', { x: h.x, z: h.z }); beginStep(g); }
+    }
     // Hearts come back at the campfire, and with «Цветение» anywhere calm.
     const resting = !threat && g.hearts < g.maxHearts && Math.hypot(g.campfire.x - h.x, g.campfire.z - h.z) < REST_R;
     g.restT = resting ? g.restT + dt : 0;

@@ -32,7 +32,17 @@
     --safe-b: env(safe-area-inset-bottom, 0px);
     --safe-l: env(safe-area-inset-left, 0px);
     --safe-r: env(safe-area-inset-right, 0px);
+    --vw: 1vw; /* 1% of the game's width (see html.turned) */
   }
+  /* A phone held sideways: orient.js turns the page back so the game stays upright the way the
+     phone is held. The screen's sides then play other parts: its height is the game's width, and
+     each safe area moves to the side of the game it now covers. */
+  html.turned { --vw: 1vh; }
+  html.turned body { position: fixed; left: 0; top: 0; transform-origin: 0 0; }
+  html.turned #game { width: 100%; height: 100%; }
+  html.turned #rotate { display: none !important; }
+  html[data-turn="-90"] { --safe-t: env(safe-area-inset-left, 0px); --safe-r: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-right, 0px); --safe-l: env(safe-area-inset-bottom, 0px); }
+  html[data-turn="90"] { --safe-t: env(safe-area-inset-right, 0px); --safe-r: env(safe-area-inset-bottom, 0px); --safe-b: env(safe-area-inset-left, 0px); --safe-l: env(safe-area-inset-top, 0px); }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--ink); color: var(--text); font-family: var(--font); overflow: hidden; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   #game { position: fixed; inset: 0; width: 100vw; height: 100dvh; display: block; touch-action: none; }
@@ -43,7 +53,7 @@
   .scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1; margin: 0 -4px; padding: 0 4px 8px; }
 
   h1, h2, h3, p { margin: 0; }
-  .logo { font-size: clamp(44px, 14vw, 64px); font-weight: 900; letter-spacing: .02em; line-height: .95; text-align: center; color: var(--gold); text-shadow: 0 4px 0 var(--gold-dark), 0 10px 24px rgba(0,0,0,.45); transform: rotate(-3deg); }
+  .logo { font-size: clamp(44px, calc(14 * var(--vw)), 64px); font-weight: 900; letter-spacing: .02em; line-height: .95; text-align: center; color: var(--gold); text-shadow: 0 4px 0 var(--gold-dark), 0 10px 24px rgba(0,0,0,.45); transform: rotate(-3deg); }
   .tagline { margin-top: 10px; text-align: center; color: var(--muted); font-weight: 700; font-size: 15px; }
   .topbar { display: flex; align-items: center; gap: 12px; min-height: 48px; }
   .topbar h2 { flex: 1; font-size: 24px; font-weight: 900; }
@@ -204,7 +214,7 @@
   #hearts .off { opacity: .28; filter: grayscale(1); }
   #hearts.many { font-size: 17px; gap: 1px; }
   #hearts.hit { animation: shake .35s; }
-  #task { margin-top: 6px; background: rgba(20,24,43,.62); border-radius: 12px; padding: 7px 11px; font-weight: 800; font-size: 14px; line-height: 1.25; max-width: min(72vw, 300px); }
+  #task { margin-top: 6px; background: rgba(20,24,43,.62); border-radius: 12px; padding: 7px 11px; font-weight: 800; font-size: 14px; line-height: 1.25; max-width: min(calc(72 * var(--vw)), 300px); }
   #task.new { animation: pop .4s cubic-bezier(.2,.8,.2,1); }
   #talkBtn { position: absolute; left: calc(20px + var(--safe-l)); bottom: calc(184px + var(--safe-b)); pointer-events: auto; display: none; min-height: 52px; font-size: 18px; }
   body.stick-right #talkBtn { left: auto; right: calc(20px + var(--safe-r)); }
@@ -221,7 +231,7 @@
   #chapterCard small { display: block; color: #fff; font-weight: 800; font-size: 15px; text-shadow: 0 2px 6px rgba(0,0,0,.6); }
   #chapterCard h2 { font-size: 30px; font-weight: 900; color: var(--gold); text-shadow: 0 4px 0 var(--gold-dark), 0 8px 20px rgba(0,0,0,.5); margin-top: 4px; }
   #chapterCard.go { animation: card 3.2s cubic-bezier(.2,.8,.2,1); }
-  #bossBar, #temp { display: none; margin-top: 6px; background: rgba(20,24,43,.62); border-radius: 12px; padding: 6px 10px 8px; width: min(72vw, 300px); }
+  #bossBar, #temp { display: none; margin-top: 6px; background: rgba(20,24,43,.62); border-radius: 12px; padding: 6px 10px 8px; width: min(calc(72 * var(--vw)), 300px); }
   #bossBar.on, #temp.on { display: block; }
   #bossBar b { display: block; font-size: 13px; font-weight: 900; color: #ffc4c4; margin-bottom: 4px; }
   #temp span { display: block; font-size: 12px; font-weight: 800; margin-bottom: 4px; }
@@ -241,7 +251,7 @@
   #dialog .face { display: none; float: left; width: 62px; height: 78px; margin: 0 12px 6px 0; border-radius: 10px; background: center 20% / cover no-repeat; border: 2px solid var(--gold); }
   #dialog .face.pic { display: block; }
   #dialog .face.crest { display: grid; place-items: center; font-size: 30px; border: 0; background: var(--crest); clip-path: polygon(0 0, 100% 0, 100% 68%, 50% 100%, 0 68%); }
-  #gift { position: absolute; left: 50%; top: calc(20% + var(--safe-t)); width: min(86vw, 340px); text-align: center; pointer-events: none; opacity: 0; transform: translate(-50%, 10px); border-color: rgba(255,211,77,.5); }
+  #gift { position: absolute; left: 50%; top: calc(20% + var(--safe-t)); width: min(calc(86 * var(--vw)), 340px); text-align: center; pointer-events: none; opacity: 0; transform: translate(-50%, 10px); border-color: rgba(255,211,77,.5); }
   #gift.on { animation: gift 7s cubic-bezier(.2,.8,.2,1) forwards; }
   #gift small { color: var(--gold); font-weight: 900; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
   #gift h3 { font-size: 22px; font-weight: 900; margin: 2px 0 8px; }
@@ -260,6 +270,30 @@
   #islandMap .cell.done { background: rgba(126,224,122,.2); }
   #islandMap .cell.fog { opacity: .5; }
   #mapGems { text-align: center; }
+  #islandMap .cell s { position: absolute; top: 3px; left: 6px; text-decoration: none; font-size: 11px; font-weight: 900; color: var(--gold); }
+  #timer { display: none; margin-top: 6px; background: rgba(20,24,43,.7); font-variant-numeric: tabular-nums; }
+  #timer.on { display: inline-flex; }
+  #timer.low { background: var(--coral); color: #fff; animation: pulse .5s infinite alternate; }
+  /* «Летопись»: the book of the world's lore (from the pause) */
+  #chronBtn .dot { display: none; width: 9px; height: 9px; border-radius: 50%; background: var(--coral); margin-left: 6px; }
+  #chronBtn.fresh .dot { display: inline-block; }
+  #chronicle .card { margin: auto 0; display: flex; flex-direction: column; gap: 10px; max-height: calc(100% - 8px); }
+  #chronicle .head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  #chronicle h2 { font-size: 24px; font-weight: 900; }
+  #chronList, #chronPage { overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; min-height: 0; }
+  #chronList h4 { margin: 10px 2px 6px; color: var(--gold); font-size: 13px; font-weight: 900; letter-spacing: .03em; text-transform: uppercase; }
+  #chronList .page { display: block; width: 100%; text-align: left; margin: 0 0 6px; padding: 10px 12px; border: 0; border-radius: 12px; background: rgba(255,255,255,.08); color: var(--text); font: inherit; }
+  #chronList .page b { font-weight: 800; font-size: 15px; }
+  #chronList .page small { display: block; margin-top: 3px; color: var(--muted); font-weight: 700; font-size: 12px; }
+  #chronList .page.shut { opacity: .6; }
+  #chronList .page.fresh b::after { content: ' • новое'; color: var(--coral); font-size: 12px; }
+  #chronPage { display: none; }
+  #chronPage h3 { font-size: 22px; font-weight: 900; color: var(--gold); margin: 6px 0 10px; }
+  #chronPage p { font-size: 17px; font-weight: 700; line-height: 1.45; margin-bottom: 10px; }
+  #chronicle.reading #chronList { display: none; }
+  #chronicle.reading #chronPage { display: block; }
+  #chronicle:not(.reading) #chronBack { display: none; }
+  #chronicle .row { display: flex; } #chronicle .row .btn { flex: 1; }
   @keyframes card { 0% { opacity: 0; transform: translateY(10px) scale(.9); } 12% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
   @keyframes shake { 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
   /* hero creator */
@@ -273,8 +307,8 @@
   .pick.on { border-color: var(--gold); background: rgba(255,211,77,.16); }
   .pick.sw { width: 36px; min-height: 36px; padding: 0; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(255,255,255,.3); }
   .pick.sw.on { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
-  /* The game is portrait-only. iOS can't lock orientation from a web page, so in landscape
-     a full-screen prompt covers everything (and the game pauses — see main.js). */
+  /* The game is portrait-only. Phones turned sideways keep it upright (html.turned above); a short
+     landscape window elsewhere gets a full-screen prompt instead (and the game pauses — see main.js). */
   #rotate { position: fixed; inset: 0; z-index: 50; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; background: var(--ink); }
   #rotate .phone { width: 46px; height: 80px; border: 5px solid var(--gold); border-radius: 12px; animation: turn 1.6s ease-in-out infinite; }
   #rotate h2 { font-size: 24px; font-weight: 900; }
@@ -290,7 +324,7 @@
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   }
-  @media (min-width: 600px) { .screen > * { width: 100%; max-width: 460px; margin-left: auto; margin-right: auto; } }
+  @media (min-width: 600px) { html:not(.turned) .screen > * { width: 100%; max-width: 460px; margin-left: auto; margin-right: auto; } }
 </style>
 <script type="importmap">
 { "imports": {
@@ -408,7 +442,8 @@
     <div class="arcade-only"><div class="tally"><div id="score" class="score">0</div><div id="wave" class="wave">Волна 1</div></div><span id="mult" class="chip mult">×2 следующий выстрел</span><div id="perkRow"></div></div>
     <div class="story-only"><div id="hearts" role="img" aria-label="Сердца"></div><div id="task"></div>
       <div id="bossBar" role="status"><b id="bossName"></b><div class="bar"><i id="bossFill"></i></div></div>
-      <div id="temp" role="status"><span id="tempLabel"></span><div class="bar"><i id="tempFill"></i></div></div></div>
+      <div id="temp" role="status"><span id="tempLabel"></span><div class="bar"><i id="tempFill"></i></div></div>
+      <span id="timer" class="chip" role="timer"></span></div>
     <span class="spacer"></span>
     <button id="pauseBtn" class="btn icon ghost" aria-label="Пауза">❚❚</button>
   </div>
@@ -442,6 +477,7 @@
     <div class="story-only"><div id="islandMap" aria-label="Карта острова"></div><p id="mapGems" class="note"></p></div>
     <button id="resumeBtn" class="btn big">Продолжить</button>
     <button id="restartBtn" class="btn ghost arcade-only">Заново</button>
+    <button id="chronBtn" class="btn ghost story-only">📜 Летопись<span class="dot"></span></button>
     <button id="lookBtn" class="btn ghost story-only">Облик героя</button>
     <button id="quitBtn" class="btn ghost">В меню</button>
   </div>
@@ -465,6 +501,15 @@
         <button id="menuBtn" class="btn ghost">Меню</button>
       </div>
     </div>
+  </div>
+</section>
+
+<section id="chronicle" class="screen dim">
+  <div class="card">
+    <div class="head"><h2>📜 Летопись</h2><span id="chronCount" class="chip"></span></div>
+    <div id="chronList"></div>
+    <div id="chronPage"><h3 id="chronTitle"></h3><div id="chronText"></div></div>
+    <div class="row"><button id="chronBack" class="btn ghost">← Назад</button><button id="chronClose" class="btn">Закрыть</button></div>
   </div>
 </section>
 

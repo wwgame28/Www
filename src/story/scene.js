@@ -8,6 +8,9 @@ import { solidOf, zoneProps } from './world.js';
 import { gust } from './hazards.js';
 import { LINES } from './zones/index.js';
 import { PALETTES, PEOPLE_PALETTES, SKINS, GEMS } from './data.js';
+import { SCROLLS } from './chronicle.js';
+
+const scrollsOf = (zone) => SCROLLS.filter((p) => p.unlock.scroll.zone === zone).map((p) => ({ id: p.id, x: p.unlock.scroll.x, z: p.unlock.scroll.z }));
 
 const angleTo = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 const kitOf = (area, m) => (m.startsWith('@') ? m.slice(1).split('/') : [area.kit, m]);
@@ -27,7 +30,7 @@ const THRONES = {
 };
 
 export const zoneSaved = (area, story) => {
-  const own = LINES.filter((l) => l.zone === area.id);
+  const own = LINES.filter((l) => l.zone === area.id && !l.side);
   return own.length > 0 && own.every((l) => story.done.includes(l.id));
 };
 
@@ -145,8 +148,10 @@ export function createStoryScene(ctx) {
     if (opts.tint) tintObj(obj, opts.tint);
     obj.position.set(o.x, 0, o.z); obj.rotation.y = o.rot;
     level.add(obj);
-    const h = new THREE.Box3().setFromObject(obj).max.y;
-    if (h > 1.4) addOccluder(obj, o.x, o.z, Math.max(o.r, (o.hx || 0) + o.r, (o.hz || 0) + o.r));
+    const box = new THREE.Box3().setFromObject(obj), h = box.max.y;
+    // A tree's crown is much wider than its trunk: it fades when it hides the hero, too.
+    const crown = e[5] === 'trunk' ? (Math.max(box.max.x - box.min.x, box.max.z - box.min.z) / 2) * 0.8 : 0;
+    if (h > 1.4) addOccluder(obj, o.x, o.z, Math.max(o.r, (o.hx || 0) + o.r, (o.hz || 0) + o.r, crown));
     const f = FLAMES[o.model];
     if (f) flamePts.push({ x: o.x, y: h * f[0], z: o.z, scale: f[1] });
     if (opts.hurts) st.thorns.push(obj);
@@ -352,24 +357,67 @@ export function createStoryScene(ctx) {
     });
     return swirl;
   }
+  // Quest items: models standing on the ground (flowers, mushrooms, jugs, pryaniki…) or glowing
+  // things that float and turn (gems, pearls, stars, medals). [kit, model, height] or a maker.
+  const ITEMS = {
+    flower: { color: 0xffd34d, model: ['nature', 'flower_yellowA', 0.7], glow: [0xffc830, 0.55] },
+    mushroom: { color: 0x9fffd0, model: ['nature', 'mushroom_red', 0.6], glow: [0x7fffc0, 0.5] },
+    jug: { color: 0x7fd8ff, model: ['nature', 'pot_small', 0.6] },
+    cookie: { color: 0xffb46a, model: ['holiday', 'gingerbread-man', 0.75] },
+    ore: { color: 0xff9a5a, model: ['hex', 'resource_stone', 0.55] },
+    bottle: { color: 0x9fffd8, make: () => bottleMesh(), lie: true },
+    pearl: { color: 0xffffff, make: () => new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), new THREE.MeshStandardMaterial({ color: 0xfff8f0, emissive: 0xffd8f0, emissiveIntensity: 0.6, roughness: 0.1, metalness: 0.3 })) },
+    star: { color: 0xffe27a, make: () => new THREE.Mesh(starGeo(), glowMat(0xffe27a, 1.3)) },
+    medal: { color: 0xffd34d, make: () => medalMesh() },
+    sunstone: { color: 0xffb42e, make: () => gemMesh(0xffb42e) },
+    crystal: { color: 0x9fe8ff, make: () => gemMesh(0x9fe8ff) },
+    shard: { color: 0x7ff3ff, make: () => gemMesh(0x7ff3ff) },
+    scroll: { color: 0xffe9a8, make: () => scrollMesh() },
+  };
+  function gemMesh(c) { const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), glowMat(c, 1.4)); m.scale.y = 1.6; return m; }
+  function bottleMesh() {
+    const g = new THREE.Group(), glass = new THREE.MeshStandardMaterial({ color: 0x6fd8a8, transparent: true, opacity: 0.6, roughness: 0.05, emissive: 0x1a6a4a, emissiveIntensity: 0.4 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.34, 12), glass), neck = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 0.14, 10), glass);
+    neck.position.y = 0.24;
+    const cork = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.06, 8), new THREE.MeshStandardMaterial({ color: 0x8a5a32 })); cork.position.y = 0.33;
+    const note = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.22, 8), new THREE.MeshStandardMaterial({ color: 0xfff2d0, emissive: 0x6a5a3a, emissiveIntensity: 0.4 }));
+    g.add(body, neck, cork, note);
+    g.rotation.z = Math.PI / 2 - 0.25; // lies in the sand
+    g.scale.setScalar(1.6);
+    return g;
+  }
+  function medalMesh() {
+    const g = new THREE.Group(), gold = glowMat(0xffc83d, 0.8);
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.05, 24), gold); disc.rotation.x = Math.PI / 2;
+    const star = new THREE.Mesh(starGeo(), glowMat(0xfff2b0, 1)); star.scale.setScalar(0.45); star.position.z = 0.04;
+    const ribbon = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.26, 0.02), new THREE.MeshStandardMaterial({ color: 0x3a6ad8 })); ribbon.position.y = 0.3;
+    g.add(disc, star, ribbon);
+    return g;
+  }
+  function scrollMesh() {
+    const g = new THREE.Group(), paper = new THREE.MeshStandardMaterial({ color: 0xfff0c8, emissive: 0xffd88a, emissiveIntensity: 0.5, roughness: 0.6 });
+    const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.46, 14), paper); roll.rotation.z = Math.PI / 2;
+    const wood = new THREE.MeshStandardMaterial({ color: 0x8a5a32 });
+    for (const x of [-0.27, 0.27]) { const k = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.08, 8), wood); k.rotation.z = Math.PI / 2; k.position.x = x; g.add(k); }
+    const tie = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.018, 6, 16), new THREE.MeshStandardMaterial({ color: 0xd83a48 })); tie.rotation.y = Math.PI / 2;
+    g.add(roll, tie);
+    return g;
+  }
   async function itemView(it) {
-    const g = new THREE.Group(), color = { shard: 0x7ff3ff, flower: 0xffd34d, pearl: 0xffffff, crystal: 0x9fe8ff, star: 0xffe27a }[it.kind] || 0xffffff;
+    const g = new THREE.Group(), def = ITEMS[it.kind] || ITEMS.shard, color = def.color;
     let gem;
-    if (it.kind === 'flower') {
-      gem = (await instance('nature', 'flower_yellowA', { height: 0.7, center: true })).obj;
-      const glow = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), glowMat(0xffc830, 1.2));
-      glow.position.y = 0.55;
-      gem.add(glow);
-    }
-    else if (it.kind === 'pearl') gem = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), new THREE.MeshStandardMaterial({ color: 0xfff8f0, emissive: 0xffd8f0, emissiveIntensity: 0.6, roughness: 0.1, metalness: 0.3 }));
-    else if (it.kind === 'star') { gem = new THREE.Mesh(starGeo(), glowMat(color, 1.3)); }
-    else { gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), glowMat(color, 1.4)); gem.scale.y = 1.6; }
+    if (def.model) {
+      const [kit, model, h] = def.model;
+      gem = (await instance(kit, model, { height: h, center: true })).obj;
+      if (def.glow) { const glow = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), glowMat(def.glow[0], 1.2)); glow.position.y = def.glow[1]; gem.add(glow); }
+    } else gem = def.make();
+    if (def.lie) gem.position.y = 0.2;
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.55, 28), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04;
     g.add(gem, ring, beam(color));
     g.position.set(it.x, 0, it.z);
     level.add(g);
-    return { obj: g, gem, ring, it, spin: it.kind !== 'flower' };
+    return { obj: g, gem, ring, it, spin: !def.model && !def.lie, baseY: def.lie ? 0.2 : 0 };
   }
   function starGeo() {
     const s = new THREE.Shape();
@@ -414,7 +462,7 @@ export function createStoryScene(ctx) {
     flamePts.length = 0;
     st = {
       people: new Map(), targets: null, targetViews: [], items: null, itemViews: [], object: null, thorns: [], spinners: [], billboards: [], portraitSolids: [],
-      rocks: [], shots: [], marks: [], swirls: [], foam: null, lights: [], queenState: null, zz: null, ice: null, prison: null, throne: null, objHp: null,
+      rocks: [], shots: [], marks: [], swirls: [], scrollViews: [], foam: null, lights: [], queenState: null, zz: null, ice: null, prison: null, throne: null, objHp: null,
     };
     ground();
     const jobs = [];
@@ -445,6 +493,7 @@ export function createStoryScene(ctx) {
       level.add(d); st.spinners.push(d);
     }
     if (area.object) jobs.push(loadModel('hex', area.object.model));
+    for (const sc of scrollsOf(area.id)) if (!(story.scrolls || []).includes(sc.id)) jobs.push(itemView({ ...sc, kind: 'scroll' }).then((v) => st.scrollViews.push(v)));
     jobs.push(loadModel('hex', 'target'), loadModel('hex', 'rock_single_D'), loadModel('hex', 'rock_single_A'));
     const mine = st;
     await Promise.all(jobs);
@@ -500,9 +549,13 @@ export function createStoryScene(ctx) {
       st.itemViews = [];
       for (const it of own) itemView(it).then((v) => { if (st.items === own) st.itemViews.push(v); else level.remove(v.obj); });
     }
+    for (const v of st.scrollViews) { // a found scroll vanishes
+      if (v.obj.visible && g.scrolls.find((x) => x.id === v.it.id)?.taken) { v.obj.visible = false; fx.burst('ring', v.it.x, 0.8, v.it.z, 0xffe9a8); }
+      v.gem.position.y = 0.7 + Math.sin(g.time * 2 + v.it.x) * 0.1; v.gem.rotation.y += dt;
+    }
     for (const v of st.itemViews) {
       v.obj.visible = !v.it.taken;
-      v.gem.position.y = v.spin ? 0.75 + Math.sin(g.time * 2.5 + v.it.id) * 0.12 : 0; // gems float, flowers grow
+      v.gem.position.y = v.spin ? 0.75 + Math.sin(g.time * 2.5 + v.it.id) * 0.12 : v.baseY; // gems float, flowers grow
       if (v.spin) v.gem.rotation.y += dt * 1.8;
       v.ring.scale.setScalar(1 + Math.sin(g.time * 5) * 0.1);
     }

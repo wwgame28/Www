@@ -50,7 +50,9 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const fx = createFx(scene, { budget: high ? 1 : 0.5 });
-  let rect = canvas.getBoundingClientRect(); // cached: reading it every touch/frame forces a layout
+  // The canvas fills the game's frame from its corner; touch points come in that frame (orient.js), so
+  // its own size is the rect (getBoundingClientRect would give the turned box on a sideways phone).
+  let rect = { left: 0, top: 0, width: canvas.clientWidth, height: canvas.clientHeight };
 
   // Bloom + vignette on the "beautiful" setting; plain rendering otherwise (cheaper, cooler phone).
   let composer = null, bloom = null;
@@ -862,7 +864,7 @@ export function createRenderer(canvas, { quality = 'high' } = {}) {
     camera.aspect = w / Math.max(1, h);
     camera.fov = fovNow();
     camera.updateProjectionMatrix();
-    rect = renderer.domElement.getBoundingClientRect();
+    rect = { left: 0, top: 0, width: w, height: h };
     placeCamera();
   }
 
