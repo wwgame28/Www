@@ -1,10 +1,10 @@
 # State — 2026-10-12
-Goal: «Рикошет» — 3D web game for iPhone (arcade + open-world story «Приключение»), GitHub Pages https://wwgame28.github.io/Www/, branch claude/context-optimizer-plugin-569iyo, owner merges PRs.
+Goal: «Рикошет» — 3D web game for iPhone (arcade + open-world story «Приключение»), GitHub Pages https://wwgame28.github.io/Www/ (serves main), branch claude/context-optimizer-plugin-569iyo, owner merges PRs.
 Done:
-- Story v2: village + 7 kingdoms + caves (src/story/zones/*), queens, gems, blessings, bosses, hazards; scene.js renders zones; HUD (boss bar, cold/heat, ⚡ dash, island map, gift cards, ending). PR #10 merged.
-- Portrait lock (src/orient.js) + 16 ⭐ errands, «Летопись» (src/story/chronicle.js, 37 pages, 10 scrolls), timed steps — PR #11 open (commits a5eca90, 9ec3fa1).
-- Lore: docs/superpowers/specs/2026-10-12-seven-crowns-lore.md, 2026-10-12-universe-lore.md.
-- Workflow wf_e71384de-6ec (research: mechanics, VFX, assets, story, bugs, balance → plan); reports in scratchpad/research/.
-Next: review the plan, run the implementation workflow (sequential packages, tests green, local commits), then push + PR.
-Checks passed: node --test tests/*.test.mjs → 98/98 on 9ec3fa1; bot: all main lines × 7 weapons, all errands × 7 weapons; Playwright iPhone 14 (portrait + landscape): no page errors.
-Gotchas: headless Chromium uses software GL (very slow: click #dialog via DOM, not page.click). Story recall cooldown 4 s; lineOf picks the first open line per zone (side lines after the main one; village errands after the finale in LINES order). Assets: KayKit from GitHub (add_repo first), Kenney kits came as owner uploads; licences CC0. Never use paid TinyFish tools.
+- Story v2 (PR #10), portrait lock + 16 errands + «Летопись» (PR #11) — merged.
+- Studio skills: branch claude/game-studio-skills (73 skills, 49 agents from Claude Code Game Studios 1.1.3, MIT; hotfix and the pack's hooks/scripts/docs not installed), pushed, no PR (owner's call).
+- Review: docs/review/2026-10-12-game-review.md (14 problems ranked, 5 phone wins).
+- Fixes: save on pause/hide/pagehide; no render while paused, 30 fps on menu/over; rogue trait (speed+magnet), black-hole radii 3.2/2.6; Кузница Грома (src/story/forge.js); Задания дня + chest streak (src/tasks.js); ads layer src/monetize.js (yandex/crazygames/poki/test via ?platform=, none on Pages) with rewarded ×2 coins, revive, tasks ×2, forge +100; auto-throw setting; chapter progress on the map; SE task line; README; docs/monetization.md.
+Checks passed: node --test → 111/111; story bot: 10 lines × 7 weapons, errands (blackhole, ricochet) 0 stuck; arcade bot spread 1.8×; Playwright iPhone 14: tasks, forge, revive, over ×2, no-platform mode, paused draws 0 — no page errors.
+Next (owner decisions): gentle start for new players (changes records), meshopt model compression (needs on-device visual check), English, Act 2.
+Gotchas: headless Chromium uses software GL (click via DOM). data.daily = daily-challenge records; daily tasks live in data.dayTasks. Never use paid TinyFish tools.

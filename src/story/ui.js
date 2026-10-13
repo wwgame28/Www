@@ -5,7 +5,7 @@ import { BASES, PALETTES, SKINS, GEMS } from './data.js';
 import { WEAPONS } from '../weapons.js';
 import { ZONES, LINES } from './zones/index.js';
 import { meets } from './quests.js';
-import { BOOKS, PAGES, pageOpen } from './chronicle.js';
+import { BOOKS, PAGES, SCROLLS, pageOpen } from './chronicle.js';
 
 // The creator's open tab ('look' | 'weapon'): a row of buttons per choice; onPick(key, id) on a tap.
 export function renderCreator(tab, draft, onPick) {
@@ -86,7 +86,12 @@ export function renderMap(story, here) {
     return `<span class="${cls}"><i>${ICON[id]}</i><b>${ZONES[id].name}</b>${gem ? `<em style="--c:${gem.color}">${story.gems.includes(gem.id) ? '◆' : '◇'}</em>` : ''}${errands ? `<s>⭐${errands}</s>` : ''}${id === here ? '<u>ты здесь</u>' : ''}</span>`;
   };
   $('islandMap').innerHTML = MAP.map((row) => row.map(cell).join('')).join('');
-  $('mapGems').textContent = `Камни королев: ${story.gems.length} из ${GEMS.length}`;
+  // Chapter 1 at a glance: the kingdoms' lines, the errands and the scrolls.
+  const main = LINES.filter((l) => !l.side), side = LINES.filter((l) => l.side);
+  const done = (list) => list.filter((l) => story.done.includes(l.id)).length;
+  const found = (story.scrolls || []).length, all = main.length + side.length + SCROLLS.length;
+  const pct = Math.round((100 * (done(main) + done(side) + found)) / all);
+  $('mapGems').innerHTML = `<b>Глава 1 — пройдено ${pct}%</b><br>Сюжет ${done(main)}/${main.length} · ◆ ${story.gems.length}/${GEMS.length} · ⭐ ${done(side)}/${side.length} · 📜 ${found}/${SCROLLS.length}`;
 }
 
 // The «Летопись»: books with their pages; a closed page says how to open it.

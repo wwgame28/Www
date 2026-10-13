@@ -204,13 +204,13 @@ const STEPS = {
       p.vx = (nx - p.x) / dt; p.vz = (nz - p.z) / dt;
       p.x = nx; p.z = nz;
       clampToArena(p, world);
-      if (u >= 1) { p.phase = 'pull'; p.pullT = 0; p.pull = { x: p.x, z: p.z, r: 4 * (p.r / PROJECTILE_R), strength: 6 }; p.vx = p.vz = 0; }
+      if (u >= 1) { p.phase = 'pull'; p.pullT = 0; p.pull = { x: p.x, z: p.z, r: 3.2 * (p.r / PROJECTILE_R), strength: 6 }; p.vx = p.vz = 0; }
       return;
     }
     p.pullT += dt;
     if (p.pullT >= 1.2) {
       p.events.push('explode');
-      p.explosion = { x: p.x, z: p.z, r: 3 * (p.r / PROJECTILE_R) };
+      p.explosion = { x: p.x, z: p.z, r: 2.6 * (p.r / PROJECTILE_R) };
       drop(p);
     }
   },

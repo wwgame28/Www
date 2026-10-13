@@ -24,7 +24,8 @@ export const HEROES = [
   },
   {
     id: 'rogue', name: 'Разбойник', model: 'Rogue', weapon: 'snake', unlock: 800,
-    weaponName: 'Кинжал-змея', desc: 'Кинжал виляет волной, 2 отскока',
+    weaponName: 'Кинжал-змея', desc: 'Кинжал виляет волной, 2 отскока. Ловкач: бегает быстрее, кинжал сам ползёт к нему',
+    trait: { speed: 1, magnet: 1 }, // starts every run with these perk levels
     hold: ['Knife', 'Knife_Offhand'], proj: { kit: 'props', model: 'dagger', spin: 'point', len: 0.6 }, heldProp: 'Knife', color: 0x7dff6a, shoot: 'Throw',
   },
   {
@@ -44,5 +45,6 @@ export const HEROES = [
   },
 ];
 
+// trait: perk levels a hero starts every run with (perks.js ids), part of what makes it worth unlocking.
 // Old saves and challenge links stored a weapon id; map it to the hero that carries that weapon.
 export const getHero = (id) => HEROES.find((h) => h.id === id) || HEROES.find((h) => h.weapon === id) || HEROES[0];

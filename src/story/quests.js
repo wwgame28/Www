@@ -6,6 +6,7 @@ import { BASES, PALETTES, SKINS, GEMS, BLESSINGS } from './data.js';
 import { LINES, ZONES } from './zones/index.js';
 import { WEAPONS } from '../weapons.js';
 import { SCROLLS, getPage } from './chronicle.js';
+import { blankForge, repairForge, forgeHearts } from './forge.js';
 
 const emit = (g, type, data = {}) => g.events.push({ type, ...data });
 export const say = (g, text) => text.replaceAll('{name}', g.heroName);
@@ -70,6 +71,7 @@ export function completeStep(g) {
   if (st.flag && !s.flags.includes(st.flag)) s.flags.push(st.flag);
   if (st.reward) emit(g, 'reward', { coins: st.reward });
   s.lines[l.id] = (s.lines[l.id] || 0) + 1;
+  emit(g, 'stepDone', { line: l.id, side: !!l.side }); // «Задания дня» count these
   if (s.lines[l.id] >= l.steps.length) finishLine(g, l);
   if (stepOf(g)?.at !== 'lastKill') s.drop = null;
   emit(g, 'save');
@@ -88,7 +90,7 @@ function finishLine(g, l) {
   emit(g, 'lineDone', { id: l.id, title: l.title, gem: l.gem || null, blessing: l.blessing || null, ending: !!l.ending });
 }
 
-export const maxHearts = (s) => 5 + s.gems.length;
+export const maxHearts = (s) => 5 + s.gems.length + forgeHearts(s); // a heart per queen's gem and per forge level
 
 // World events that move the current objective along.
 export function onEvent(g, ev) {
@@ -142,7 +144,7 @@ function hubTask(g) {
 }
 
 // ---------- save ----------
-export const blankStory = () => ({ v: 2, hero: null, zone: 'village', flags: [], gems: [], blessings: [], lines: {}, done: [], drop: null, scrolls: [], read: [] });
+export const blankStory = () => ({ v: 2, hero: null, zone: 'village', flags: [], gems: [], blessings: [], lines: {}, done: [], drop: null, scrolls: [], read: [], forge: blankForge() });
 const pick = (list, id, key = 'id') => (list.some((x) => x[key] === id) ? id : list[0][key]);
 const strings = (a, ok) => (Array.isArray(a) ? [...new Set(a.filter((x) => typeof x === 'string' && x.length < 40 && ok(x)))] : []);
 
@@ -175,6 +177,7 @@ export function repairStory(s) {
     out.zone = ZONES[s.zone] ? s.zone : 'village';
     out.scrolls = strings(s.scrolls, (id) => SCROLLS.some((p) => p.id === id)); // the «Летопись»: scrolls found, pages read
     out.read = strings(s.read, (id) => !!getPage(id));
+    out.forge = repairForge(s.forge); // Кузница Грома levels
   }
   out.drop = Array.isArray(s.drop) && s.drop.length === 2 && s.drop.every(Number.isFinite) ? [s.drop[0], s.drop[1]] : null;
   return out;

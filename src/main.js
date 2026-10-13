@@ -13,7 +13,8 @@ import * as progress from './progress.js';
 import * as shop from './shop.js';
 import { $, show, toast, renderHero, renderLocations, popup, banner, aimAt } from './ui.js';
 import { getWeapon } from './weapons.js';
-import { createWorld, stepWorld, nextLine, DASH } from './story/world.js';
+import { createWorld, stepWorld, nextLine, DASH, applyForge, revive } from './story/world.js';
+import { FORGE, getUpgrade, forgeOpen, forgeLevel, nextPrice, buyUpgrade } from './story/forge.js';
 import { ZONES } from './story/zones/index.js';
 import { GEMS, getGem, getBlessing } from './story/data.js';
 import { taskOf, repairHero, getLine } from './story/quests.js';
@@ -21,11 +22,15 @@ import { openPages } from './story/chronicle.js';
 import { heroDef } from './story/hero.js';
 import { renderCreator, renderHearts, chapterCard, giftCard, renderMap, renderChronicle, showPage } from './story/ui.js';
 import { updateOrientation, toLocal, size, turned } from './orient.js';
+import * as tasks from './tasks.js';
+import { createAds } from './monetize.js';
 
 updateOrientation(); // a phone held sideways: the game turns back upright before anything is laid out
 const STEP = 1 / 60;
 const data = progress.load();
 const audio = createAudio();
+// Rewarded and break ads on game portals; none on GitHub Pages (monetize.js), where the ad buttons stay hidden.
+const ads = createAds({ hooks: { pause: () => audio.suspend(), resume: () => audio.resume() } });
 const canvas = $('game');
 const centerOf = (id) => () => {
   const r = $(id).getBoundingClientRect();
@@ -62,6 +67,7 @@ let sceneKey = '';           // which location is currently built
 let heroKey = '';            // which hero model is currently loaded
 let browse = 0;              // hero index shown on the heroes screen
 let overTimer = 0;
+let runCoins = 0;             // coins of the last run (a rewarded ad doubles them)
 let hintShown = false;
 let queued = null;         // fire press waiting for the projectile to come back: { tap, t }
 let lock = null;           // enemy the third-person crosshair has locked (setting «Автоприцел»)
@@ -123,6 +129,7 @@ function refreshMenu() {
   const today = todayKey();
   const d = daily(today);
   $('dailySub').textContent = `${getLocation(d.locationId).name} · ${getHero(d.heroId).name}${data.daily[today] ? ` · 🏆 ${data.daily[today]}` : ''}`;
+  refreshTasksDot();
   const box = $('challenge');
   if (challenge) {
     $('challengeText').innerHTML = `Друг набрал <b>${challenge.score}</b> (комбо ×${challenge.combo}, волна ${challenge.wave}) — ${getLocation(challenge.location).name}, ${getHero(challenge.weapon).name}. Побьёшь?`;
@@ -177,7 +184,7 @@ function pause() {
   if (mode !== 'playing') return;
   mode = 'paused';
   input.setEnabled(false);
-  if (game.mode === 'story') { renderMap({ ...game.story, zone: game.area.id }, game.area.id); markUnread(); }
+  if (game.mode === 'story') { saveStory(); renderMap({ ...game.story, zone: game.area.id }, game.area.id); markUnread(); $('forgeBtn').style.display = forgeOpen(data.story) ? '' : 'none'; }
   show('pause');
 }
 
@@ -197,8 +204,12 @@ function finish() {
   if (firstDaily) data.dailyBonus = run.date;
   const coins = shop.coinsFor(r.score, { record: rec.newBest, daily: firstDaily });
   data.coins += coins.total;
+  for (const t of tasks.track(data, todayKey(), 'runs')) toast(`📅 Задание дня выполнено: ${tasks.taskText(t)}!`);
   progress.save(data);
   showCoins(coins);
+  runCoins = coins.total; // a rewarded ad doubles them (#overAd)
+  const ad = $('overAd');
+  ad.disabled = false; ad.textContent = `📺 Удвоить монеты: +${coins.total} 🪙`; ad.style.visibility = coins.total > 0 ? '' : 'hidden';
   $('overScore').textContent = r.score;
   $('overCombo').textContent = `×${r.combo}`;
   $('overWave').textContent = r.wave;
@@ -240,7 +251,20 @@ async function share() {
 }
 
 // ---------- events from the simulation ----------
+// «Задания дня»: game events of both modes count toward today's tasks.
+function trackTask(ev) {
+  const day = todayKey();
+  let done = [];
+  if (ev.type === 'kill' && !ev.decoy) {
+    done = [...tasks.track(data, day, 'kills'), ...tasks.track(data, day, 'combo', ev.combo || 1)];
+    if (game?.mode === 'story') done.push(...tasks.track(data, day, 'storyKills'));
+  } else if (ev.type === 'waveClear') done = tasks.track(data, day, 'waves');
+  else if (ev.type === 'stepDone') done = tasks.track(data, day, 'steps');
+  for (const t of done) toast(`📅 Задание дня выполнено: ${tasks.taskText(t)}! Награда — в меню, «Задания»`);
+}
+
 function handle(ev) {
+  trackTask(ev);
   if (ev.type !== 'kill') audio.play(ev);
   view.effect(ev);
   if (ev.type === 'kill') {
@@ -396,12 +420,29 @@ function updateHint() {
 
 // ---------- loop ----------
 let last = performance.now(), acc = 0;
+// «Автобросок» (one-handed play): standing still with an enemy in the sights throws by itself.
+const AUTO_STILL = 0.2; // seconds standing still before the throw
+let stillT = 0;
+const autoThrow = () => !!data.settings.autoThrow && !!lock && stillT >= AUTO_STILL && game.projectile.state === 'held' && !game.over && !game.talk;
+
+// Battery: the menu, the creator and the result screen run at 30 fps, and a paused scene is drawn
+// once (the canvas keeps its last picture; a resize clears it, so `still` is reset there).
+const CALM = new Set(['menu', 'creator', 'over']);
+let still = false;
 function frame(now) {
   requestAnimationFrame(frame);
+  if (document.hidden) { last = now; return; }
+  ads.gameplay(mode === 'playing'); // portals: gameplay start / stop (no-op without a portal)
   const dt = Math.min(0.1, (now - last) / 1000);
+  if (CALM.has(mode) && dt < 1 / 32) return; // `last` stays, so the skipped time adds up
   last = now;
-  if (document.hidden) return;
-  const k = mode === 'paused' ? 0 : warp(dt); // hit-stop / slow motion
+  if (mode === 'paused') {
+    if (!still && game) { view.sync(game, 0, { yaw }); view.render(0); }
+    still = true;
+    return;
+  }
+  still = false;
+  const k = warp(dt); // hit-stop / slow motion
   if (mode === 'playing' && game) {
     acc += dt * k;
     while (acc >= STEP && mode === 'playing') {
@@ -412,15 +453,18 @@ function frame(now) {
       if (tap?.forward && recallReady()) recallNow = true;
       else if (tap) queued = { tap, t: FIRE_BUFFER };
       let fire = null;
+      const move = moveVector();
+      stillT = Math.hypot(move.x, move.z) < 0.15 ? stillT + STEP : 0;
       if (queued && game.projectile.state === 'held') {
         const q = queued.tap;
         queued = null;
         if (q.forward) fire = shotTarget();
         else { fire = view.screenToGround(q.x, q.y); aimAt(q.x, q.y); }
       } else if (queued && (queued.t -= STEP) <= 0) queued = null;
+      if (!fire && autoThrow()) fire = shotTarget();
       const wasFlying = game.projectile.state === 'flying';
-      if (game.mode === 'story') { stepWorld(game, STEP, { move: moveVector(), fire, recall: recallNow, talk: talkPress, dash: dashPress }); talkPress = dashPress = false; }
-      else step(game, STEP, { move: moveVector(), fire, recall: recallNow });
+      if (game.mode === 'story') { stepWorld(game, STEP, { move, fire, recall: recallNow, talk: talkPress, dash: dashPress }); talkPress = dashPress = false; }
+      else step(game, STEP, { move, fire, recall: recallNow });
       for (const ev of game.events) handle(ev);
       game.events.length = 0;
       if (killSound) { audio.play({ type: 'kill', combo: killSound }); killSound = 0; }
@@ -442,7 +486,7 @@ function frame(now) {
     overTimer -= dt;
     if (overTimer <= 0) finish();
   }
-  view.render(mode === 'paused' ? 0 : dt);
+  view.render(dt);
 }
 
 // ---------- wiring ----------
@@ -616,6 +660,7 @@ async function travel(to, arrive) {
   saveStory();
   data.story.zone = to;
   progress.save(data);
+  await ads.interstitial(); // a natural break (no-op without a portal; at most one per AD_GAP)
   try {
     await openZone(to, arrive);
     playStory(true);
@@ -770,6 +815,111 @@ $('chronBtn').addEventListener('click', () => { audio.play({ type: 'click' }); o
 $('chronBack').addEventListener('click', () => { audio.play({ type: 'click' }); openBook(); });
 $('chronClose').addEventListener('click', () => { audio.play({ type: 'click' }); markUnread(); show('pause'); });
 
+// Кузница Грома (the smith in the village, or the pause menu): the hero's upgrades for coins.
+let forgeFrom = 'hud';
+function openForge(from) {
+  forgeFrom = from;
+  if (mode === 'playing') { mode = 'paused'; input.setEnabled(false); }
+  renderForge();
+  show('forge');
+}
+function renderForge() {
+  $('forgeCoins').textContent = data.coins;
+  $('forgeList').innerHTML = FORGE.map((u) => {
+    const lvl = forgeLevel(data.story, u.id), price = nextPrice(data.story, u.id);
+    const pips = '●'.repeat(lvl) + '○'.repeat(u.prices.length - lvl);
+    const tag = price === null ? 'Макс.' : `${price} 🪙`, poor = price !== null && data.coins < price;
+    return `<button class="perk${price === null ? ' off' : ''}" data-id="${u.id}"><span class="ico">${u.icon}</span><div><h3>${u.name}</h3><p>${u.desc}</p><span class="pips">${pips}</span></div><span class="lvl${poor ? ' poor' : ''}">${tag}</span></button>`;
+  }).join('');
+}
+$('forgeList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-id]');
+  if (!b) return;
+  const r = buyUpgrade(data, b.dataset.id);
+  if (!r.ok) {
+    audio.play({ type: 'click' });
+    toast(r.reason === 'max' ? 'Это улучшение уже на максимуме' : r.reason === 'coins' ? `Не хватает ${r.need} 🪙 — монеты дают поручения, задания дня и аркада` : 'Кузница откроется, когда деревня проснётся');
+    return;
+  }
+  progress.save(data);
+  if (game?.mode === 'story') applyForge(game, data.story.forge);
+  audio.play({ type: 'waveClear' });
+  toast(`⚒ ${getUpgrade(b.dataset.id).name} — уровень ${r.level}`);
+  renderForge();
+});
+$('forgeBtn').addEventListener('click', () => { audio.play({ type: 'click' }); openForge('pause'); });
+$('forgeClose').addEventListener('click', () => { audio.play({ type: 'click' }); if (forgeFrom === 'pause') show('pause'); else resume(); });
+
+// ---------- rewarded ads (only on a game portal: body.ads shows their buttons) ----------
+const AD_COINS = 100, AD_COINS_DAY = 5; // the forge's «+100 🪙 за рекламу», a few times a day
+const adFailed = () => toast('Реклама не загрузилась — попробуй позже');
+$('forgeAd').addEventListener('click', async () => {
+  const day = todayKey();
+  if (data.adCoins.date !== day) data.adCoins = { date: day, n: 0 };
+  if (data.adCoins.n >= AD_COINS_DAY) { toast('На сегодня всё — приходи завтра'); return; }
+  if (!(await ads.rewarded())) { adFailed(); return; }
+  data.adCoins.n++;
+  data.coins += AD_COINS;
+  progress.save(data);
+  audio.play({ type: 'waveClear' });
+  toast(`+${AD_COINS} 🪙`);
+  renderForge();
+});
+$('overAd').addEventListener('click', async () => {
+  const b = $('overAd');
+  if (b.disabled || !runCoins) return;
+  b.disabled = true;
+  if (!(await ads.rewarded())) { b.disabled = false; adFailed(); return; }
+  data.coins += runCoins;
+  progress.save(data);
+  audio.play({ type: 'waveClear' });
+  b.textContent = `✓ Удвоено: +${runCoins} 🪙`;
+  runCoins = 0;
+});
+$('reviveAd').addEventListener('click', async () => {
+  if (await ads.rewarded()) { if (game?.mode === 'story') revive(game); } else adFailed();
+  resume();
+});
+$('reviveNo').addEventListener('click', () => { audio.play({ type: 'click' }); resume(); });
+
+// ---------- «Задания дня» (from the menu): today's three tasks, their rewards and the chest ----------
+const refreshTasksDot = () => $('tasksBtn').classList.toggle('fresh', tasks.waiting(data, todayKey()) > 0);
+function renderTasks() {
+  const day = todayKey(), state = tasks.today(data, day), ad = ads.can();
+  $('tasksCoins').textContent = data.coins;
+  const streak = tasks.streakNow(data, day);
+  $('tasksNote').textContent = streak
+    ? `🔥 Серия: ${tasks.dayStreak(streak)} подряд — не прерывай её, сундук растёт.`
+    : 'Выполни три задания и открой сундук. Чем больше дней подряд, тем он богаче.';
+  $('tasksList').innerHTML = state.list.map((t) => {
+    const done = tasks.isDone(t);
+    const acts = t.claimed ? '<span class="tick">✓</span>'
+      : done ? `<div class="acts"><button class="btn" data-claim="${t.id}">+${t.coins} 🪙</button>${ad ? `<button class="btn sky" data-claim="${t.id}" data-x2="1">📺 ×2</button>` : ''}</div>` : '';
+    return `<div class="task-row${t.claimed ? ' claimed' : ''}"><span class="ico">${tasks.getTask(t.id).icon}</span><div><b>${tasks.taskText(t)}</b><div class="bar"><i style="--p:${(t.n / t.goal).toFixed(3)}"></i></div><small>${t.n} / ${t.goal} · +${t.coins} 🪙</small></div>${acts}</div>`;
+  }).join('');
+  const ready = tasks.chestReady(state);
+  const next = tasks.chestCoins(state.last === tasks.yesterday(day) ? state.streak + 1 : 1);
+  $('chestRow').innerHTML = state.chest
+    ? `<span class="ico">🎁</span><div><b>Сундук открыт</b><small>Новые задания — завтра. Серия: ${tasks.dayStreak(state.streak)}</small></div><span class="tick">✓</span>`
+    : `<span class="ico">🎁</span><div><b>Сундук дня: +${next} 🪙</b><small>${ready ? 'Все награды собраны — открывай!' : 'Откроется, когда заберёшь три награды'}</small></div>${ready ? `<div class="acts"><button class="btn" data-chest="1">Открыть</button>${ad ? '<button class="btn sky" data-chest="1" data-x2="1">📺 ×2</button>' : ''}</div>` : ''}`;
+  refreshTasksDot();
+}
+async function tasksTap(e) {
+  const b = e.target.closest('button');
+  if (!b) return;
+  const day = todayKey(), x2 = !!b.dataset.x2;
+  if (x2 && !(await ads.rewarded())) { adFailed(); return; }
+  const r = b.dataset.chest ? tasks.openChest(data, day, x2 ? 2 : 1) : tasks.claim(data, day, b.dataset.claim, x2 ? 2 : 1);
+  if (!r.ok) return;
+  progress.save(data);
+  audio.play({ type: 'waveClear' });
+  toast(b.dataset.chest ? `🎁 Сундук: +${r.coins} 🪙 · серия ${tasks.dayStreak(r.streak)}` : `+${r.coins} 🪙`);
+  renderTasks();
+}
+$('tasksList').addEventListener('click', tasksTap);
+$('chestRow').addEventListener('click', tasksTap);
+$('tasksBtn').addEventListener('click', () => { audio.unlock(); audio.play({ type: 'click' }); renderTasks(); show('tasks'); });
+
 function storyEvent(ev) {
   const at = (y = 1.6) => view.worldToScreen(ev.x ?? game.hero.x, y, ev.z ?? game.hero.z);
   const pop = (text, cls = 'combo', y = 1.6) => { const s = at(y); popup(s.x, s.y, text, cls); };
@@ -780,7 +930,7 @@ function storyEvent(ev) {
       else if (ev.hint) toast(ev.hint);
       break;
     case 'talk': audio.play({ type: 'click' }); showLine(); break;
-    case 'talkEnd': showLine(); break;
+    case 'talkEnd': showLine(); if (ev.id === 'smith' && !ev.quest && forgeOpen(data.story)) openForge('hud'); break;
     case 'reward': {
       data.coins += ev.coins;
       progress.save(data);
@@ -813,7 +963,9 @@ function storyEvent(ev) {
       timeFx.length = 0;
       timeFx.push({ k: 0, t: 0.15 }, { k: 0.35, t: 0.6 });
       banner('Без сил…');
+      if (ads.can()) setTimeout(() => { if (game?.over && mode === 'playing') { mode = 'paused'; input.setEnabled(false); show('revive'); } }, 900);
       break;
+    case 'revive': pop('💪 Снова в строю!', 'combo', 2); audio.play({ type: 'pickup' }); break;
     case 'wake': chapterCard('Ты очнулся у костра', 'Сердца восстановлены'); break;
     case 'heal': audio.play({ type: 'pickup' }); if (ev.bloom) pop('🌸 +1', 'trick', 2); break;
     case 'target': {
@@ -921,7 +1073,7 @@ $('pauseBtn').addEventListener('click', (e) => { e.stopPropagation(); pause(); }
 $('resumeBtn').addEventListener('click', resume);
 $('restartBtn').addEventListener('click', () => start(run.kind));
 $('quitBtn').addEventListener('click', toMenu);
-$('againBtn').addEventListener('click', () => start(run.kind));
+$('againBtn').addEventListener('click', async () => { await ads.interstitial(); start(run.kind); });
 $('menuBtn').addEventListener('click', toMenu);
 $('shareBtn').addEventListener('click', share);
 
@@ -933,16 +1085,20 @@ const toggle = (id, on, onChange) => {
 toggle('soundToggle', data.settings.sound, (v) => { data.settings.sound = v; audio.setMuted(!v); });
 toggle('viewToggle', viewMode() === 'tps', (v) => { data.settings.view = v ? 'tps' : 'top'; document.body.classList.toggle('tps', v); view.setView(viewMode()); updateHint(); });
 toggle('aimToggle', data.settings.aimAssist !== false, (v) => { data.settings.aimAssist = v; });
+toggle('autoToggle', !!data.settings.autoThrow, (v) => { data.settings.autoThrow = v; if (v && data.settings.aimAssist === false) toast('Автобросок работает с автоприцелом — включи и его'); });
 toggle('stickToggle', !!data.settings.stickRight, (v) => { data.settings.stickRight = v; document.body.classList.toggle('stick-right', v); });
 toggle('qualityToggle', data.settings.quality === 'high', (v) => { data.settings.quality = v ? 'high' : 'low'; toast('Применится после перезапуска'); });
 
-const relayout = () => { updateOrientation(); view.resize(); };
+const relayout = () => { updateOrientation(); view.resize(); still = false; };
 addEventListener('resize', relayout);
 addEventListener('orientationchange', relayout);
 addEventListener('hashchange', () => { challenge = challengeFromHash(location.hash); if (mode === 'menu') refreshMenu(); });
+// Safari may unload a background tab without another event: everything is saved on the way out.
+const saveAll = () => { if (storyOn && game?.mode === 'story') saveStory(); else progress.save(data); };
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { pause(); audio.suspend(); } else { audio.resume(); last = performance.now(); }
+  if (document.hidden) { pause(); saveAll(); audio.suspend(); } else { audio.resume(); last = performance.now(); }
 });
+addEventListener('pagehide', saveAll);
 // Portrait only. A phone turned sideways keeps the game upright (orient.js); elsewhere (a short
 // desktop window) the #rotate prompt covers the game (CSS) and the run pauses.
 const landscape = matchMedia('(orientation: landscape) and (max-height: 520px)');
@@ -952,7 +1108,7 @@ view.resize();
 requestAnimationFrame(frame);
 // Handle for automated browser checks (they may also turn the camera).
 Object.defineProperty(window, '__ricochet', { value: { get game() { return game; }, get yaw() { return yaw; }, set yaw(v) { yaw = v; } } });
-toMenu().catch((e) => {
+toMenu().then(() => ads.ready).then(() => { ads.loaded(); document.body.classList.toggle('ads', ads.can()); if (ads.muted()) audio.setMuted(true); }).catch((e) => {
   console.error(e);
   $('loadingText').textContent = 'Не удалось загрузить игру. Обновите страницу.';
 });

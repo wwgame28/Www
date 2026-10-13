@@ -12,6 +12,7 @@ import { slideAroundSolids } from '../game.js';
 import { createRng } from '../rng.js';
 import { ZONES } from './zones/index.js';
 import { beginStep, completeStep, onEvent, stepOf, lineOf, say, meets, maxHearts } from './quests.js';
+import { forgeMods, forgeHearts, BOOTS_STEP } from './forge.js';
 import { ground, drift, portalJump, stepClimate, stepRockfall, inArea, gust } from './hazards.js';
 import { foeStep, makeBoss, bossBlocks, turnTo } from './foes.js';
 import { SCROLLS, SCROLL_REWARD } from './chronicle.js';
@@ -61,6 +62,7 @@ export function createWorld({ zoneId = 'village', story, weaponId, heroName = '�
   const { x, z, facing } = arrive || area.spawn;
   const mods = blankMods();
   if (has('wave')) { mods.bounce += 1; mods.shotSpeed += 1; }
+  for (const [k, n] of Object.entries(forgeMods(s))) mods[k] += n; // Кузница Грома
   const g = {
     mode: 'story', area, loc: { id: area.id, look: area.look, rule: {} }, weapon: getWeapon(weaponId), heroName,
     solids, arena: area.size, areas: (area.areas || []).filter((a) => !a.until || !s.done.includes(a.until)).map((a) => ({ ...a })), rng: createRng(`story:${area.id}`),
@@ -315,6 +317,17 @@ function wake(g) {
 }
 
 // ---------- talking ----------
+// A rewarded ad gets the fainted hero up on the spot (instead of at the campfire): full hearts and a
+// few safe seconds; the fight, the raid or the boss go on where they were.
+export const REVIVE_SAFE = 2.5;
+export function revive(g) {
+  if (!g.over) return false;
+  g.over = false; g.killer = null; g.faintT = 0;
+  g.hearts = g.maxHearts; g.hurtT = REVIVE_SAFE; g.temp = 0; g.slowT = 0;
+  emit(g, 'revive', { x: g.hero.x, z: g.hero.z });
+  return true;
+}
+
 export function talkTo(g, id) {
   const v = g.villagers.find((x) => x.id === id);
   if (!v || g.talk || g.over) return false;
@@ -363,7 +376,7 @@ function stepHero(g, dt, input, talking) {
     h.vx = g.dashDir[0] * DASH.speed; h.vz = g.dashDir[1] * DASH.speed;
     if (g.dashT <= 0) { g.dashing = false; h.vx *= 0.3; h.vz *= 0.3; }
   } else {
-    const sp = HERO_SPEED * gr.slow * (g.slowT > 0 ? 0.55 : 1);
+    const sp = HERO_SPEED * (1 + BOOTS_STEP * g.mods.speed) * gr.slow * (g.slowT > 0 ? 0.55 : 1);
     const k = Math.min(1, gr.friction * dt);
     h.vx += (mx * sp - h.vx) * k;
     h.vz += (mz * sp - h.vz) * k;
@@ -443,8 +456,10 @@ function stepWeapon(g, dt, input, talking) {
   }
   if (wasFlying && p.state === 'dropped') emit(g, 'drop', { x: p.x, z: p.z });
   const dHero = Math.hypot(p.x - h.x, p.z - h.z);
-  if (p.state === 'dropped' && dHero > 1e-3 && dHero < VACUUM_R) {
-    const s = Math.min(1, (8 * dt) / dHero);
+  // Close by, the dropped weapon jumps to the hand; the forge's magnet pulls it in from further away.
+  const pull = dHero < VACUUM_R ? 8 : g.mods.magnet && dHero < 2.5 + 2 * g.mods.magnet ? 2 + 1.5 * g.mods.magnet : 0;
+  if (p.state === 'dropped' && dHero > 1e-3 && pull) {
+    const s = Math.min(1, (pull * dt) / dHero);
     p.x += (h.x - p.x) * s; p.z += (h.z - p.z) * s;
   }
   if (p.state === 'flying' && p.weapon !== 'recall' && g.weapon.catchable && p.t > 0.25 && dHero < 0.75) {
@@ -560,6 +575,16 @@ function stepShots(g, dt) {
 
 // ---------- the step ----------
 // input: { move: {x, z}, fire: {x, z} | null, recall: bool, talk: bool («Говорить»), dash: bool (⚡) }
+// The forge sold an upgrade while this world runs: the new levels count at once, a new heart comes full.
+export function applyForge(g, forge) {
+  const mods = forgeMods(g.story), hearts = forgeHearts(g.story);
+  g.story.forge = { ...forge };
+  for (const [k, n] of Object.entries(forgeMods(g.story))) g.mods[k] += n - mods[k];
+  const more = forgeHearts(g.story) - hearts;
+  g.maxHearts += more;
+  g.hearts = Math.min(g.maxHearts, g.hearts + Math.max(0, more));
+}
+
 export function stepWorld(g, dt, input = {}) {
   const from = g.events.length;
   g.time += dt;
