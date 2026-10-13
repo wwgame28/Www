@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Плотность">
+<meta name="theme-color" content="#000000">
+<title>Плотность</title>
+<style>
+  :root {
+    --bg: #000;
+    --text: #d6ecff;
+    --muted: #7d93ad;
+    --line: rgba(160, 210, 255, 0.22);
+    --panel: rgba(4, 10, 20, 0.9);
+    --accent: #6fd3ff;
+    --note: #ffd166;
+    --danger: #ff4a4a;
+    --ok: #7ee0a0;
+    --font: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; }
+  .hidden { display: none !important; }
+
+  /* Экраны */
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: calc(24px + var(--safe-t)) 20px calc(24px + var(--safe-b)); background: rgba(0, 0, 0, 0.55); text-align: center; z-index: 20; }
+  .screen h1 { font-size: clamp(34px, 10vw, 64px); letter-spacing: 0.35em; margin: 0 0 4px 0.35em; font-weight: 300; text-shadow: 0 0 18px rgba(111, 211, 255, 0.6); }
+  .screen p { max-width: 460px; margin: 0; color: var(--muted); line-height: 1.5; font-size: 14px; }
+  .btn { min-width: 220px; min-height: 48px; padding: 12px 20px; border: 1px solid var(--line); border-radius: 10px; background: rgba(20, 40, 60, 0.55); font-size: 16px; letter-spacing: 0.08em; }
+  .btn.main { border-color: var(--accent); box-shadow: 0 0 16px rgba(111, 211, 255, 0.25); }
+  .btn:active { background: rgba(111, 211, 255, 0.2); }
+  .panel { width: min(520px, 100%); max-height: 100%; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; text-align: left; display: flex; flex-direction: column; gap: 12px; }
+  .panel h2 { margin: 0; font-size: 18px; font-weight: 400; letter-spacing: 0.1em; }
+  .panel label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+  .panel input[type=text], .panel input[type=password] { font: inherit; font-size: 16px; color: var(--text); background: #08121e; border: 1px solid var(--line); border-radius: 8px; padding: 10px; width: 100%; user-select: text; -webkit-user-select: text; }
+  .panel .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .panel .row .btn { min-width: 0; flex: 1; }
+  .check { flex-direction: row !important; align-items: center; color: var(--text) !important; font-size: 15px !important; }
+  .check input { width: 22px; height: 22px; }
+  .small { font-size: 12px; color: var(--muted); line-height: 1.45; }
+  .status-ok { color: var(--ok); } .status-err { color: var(--danger); }
+
+  /* HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+  #top { position: absolute; top: calc(10px + var(--safe-t)); left: calc(12px + var(--safe-l)); right: calc(12px + var(--safe-r)); display: flex; justify-content: space-between; align-items: flex-start; font-size: 13px; letter-spacing: 0.08em; color: var(--muted); }
+  #top .left { display: flex; flex-direction: column; gap: 4px; }
+  #room { color: var(--text); font-size: 15px; }
+  #notesCount { color: var(--note); }
+  #aiDot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #444; margin-right: 6px; vertical-align: middle; }
+  #aiDot.ok { background: var(--ok); box-shadow: 0 0 6px var(--ok); } #aiDot.err { background: var(--danger); } #aiDot.busy { background: var(--accent); }
+  #pauseBtn { pointer-events: auto; width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.4); font-size: 16px; }
+  #cross { position: absolute; left: 50%; top: 50%; width: 120px; height: 120px; margin: -60px 0 0 -60px; border: 1px solid rgba(111, 211, 255, 0.18); border-radius: 50%; transition: transform 0.15s, border-color 0.15s; }
+  #cross::after { content: ''; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; background: var(--accent); border-radius: 50%; }
+  #cross.beam { transform: scale(0.12); border-color: var(--accent); }
+  #reading { position: absolute; left: 50%; top: calc(50% + 50px); transform: translateX(-50%); color: var(--note); font-size: 13px; letter-spacing: 0.1em; }
+  #meters { position: absolute; right: calc(14px + var(--safe-r)); bottom: calc(272px + var(--safe-b)); width: 154px; display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: var(--muted); letter-spacing: 0.1em; }
+  .bar { height: 5px; background: rgba(255, 255, 255, 0.08); border-radius: 3px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; }
+  #noiseBar i { background: var(--danger); }
+  #sub { position: absolute; left: 50%; top: calc(100px + var(--safe-t)); transform: translateX(-50%); width: min(560px, calc(100% - 40px)); text-align: center; font-size: 16px; line-height: 1.45; text-shadow: 0 0 8px #000, 0 0 3px #000; transition: opacity 0.6s; }
+  #sub b { color: var(--accent); font-weight: 400; }
+  #sub.note { color: var(--note); }
+  #vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(120, 0, 0, 0.55) 100%); opacity: 0; transition: opacity 0.3s; }
+
+  /* Управление */
+  #controls { position: fixed; inset: 0; z-index: 11; }
+  #joyBase { position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border: 1px solid var(--line); border-radius: 50%; pointer-events: none; }
+  #joyKnob { position: absolute; width: 50px; height: 50px; margin: -25px 0 0 -25px; border-radius: 50%; background: rgba(111, 211, 255, 0.25); pointer-events: none; }
+  #joyHint { position: absolute; left: calc(30px + var(--safe-l)); bottom: calc(60px + var(--safe-b)); font-size: 11px; color: var(--muted); letter-spacing: 0.1em; pointer-events: none; }
+  #btns { position: absolute; right: calc(14px + var(--safe-r)); bottom: calc(18px + var(--safe-b)); display: grid; grid-template-columns: 72px 72px; gap: 10px; }
+  .cbtn { width: 72px; height: 72px; border-radius: 50%; border: 1px solid var(--line); background: rgba(0, 20, 40, 0.45); font-size: 11px; letter-spacing: 0.08em; display: flex; align-items: center; justify-content: center; text-align: center; }
+  .cbtn.on { background: rgba(111, 211, 255, 0.3); border-color: var(--accent); }
+  .cbtn.big { width: 72px; height: 72px; }
+  #impBtn.cool { opacity: 0.35; }
+  #diffBtn.on { background: rgba(255, 74, 74, 0.3); border-color: var(--danger); }
+
+  /* Телефон боком: полоски слева от кнопок, субтитры выше. */
+  @media (max-height: 500px) {
+    #meters { right: calc(184px + var(--safe-r)); bottom: calc(22px + var(--safe-b)); }
+    #sub { top: 22%; }
+    #cross { width: 90px; height: 90px; margin: -45px 0 0 -45px; }
+  }
+
+  /* Рация */
+  #radio { position: fixed; left: 50%; top: calc(10px + var(--safe-t)); transform: translateX(-50%); width: min(520px, calc(100% - 20px)); max-height: 60%; z-index: 30; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  #radioLog { flex: 1; overflow: auto; font-size: 14px; line-height: 1.45; display: flex; flex-direction: column; gap: 6px; min-height: 60px; }
+  #radioLog .me { color: var(--muted); } #radioLog .her { color: var(--accent); }
+  #radio form { display: flex; gap: 8px; }
+  #radio input { flex: 1; font: inherit; font-size: 16px; color: var(--text); background: #08121e; border: 1px solid var(--line); border-radius: 8px; padding: 10px; user-select: text; -webkit-user-select: text; }
+  #radio .btn { min-width: 0; min-height: 44px; padding: 8px 14px; }
+  .journal { font-size: 14px; line-height: 1.5; color: var(--note); }
+  .journal li { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="top">
+    <div class="left">
+      <span id="room">Прихожая</span>
+      <span id="notesCount">Записки 0/4</span>
+      <span><i id="aiDot"></i><span id="aiText">ИИ выкл</span></span>
+    </div>
+    <button id="pauseBtn" aria-label="Пауза">II</button>
+  </div>
+  <div id="vignette"></div>
+  <div id="cross"></div>
+  <div id="reading"></div>
+  <div id="sub"></div>
+  <div id="meters">
+    <span>ЗАРЯД</span><div class="bar" id="batBar"><i></i></div>
+    <span>ШУМ</span><div class="bar" id="noiseBar"><i></i></div>
+  </div>
+</div>
+
+<div id="controls" class="hidden">
+  <div id="joyBase" class="hidden"></div><div id="joyKnob" class="hidden"></div>
+  <div id="joyHint">← ведите пальцем: шаги</div>
+  <div id="btns">
+    <button class="cbtn" id="diffBtn">СРАВН</button>
+    <button class="cbtn" id="radioBtn">РАЦИЯ</button>
+    <button class="cbtn" id="impBtn">ИМПУЛЬС</button>
+    <button class="cbtn" id="beamBtn">ЛУЧ</button>
+    <button class="cbtn big" id="fanBtn" style="grid-column: span 2; width: 100%; border-radius: 36px;">ВЕЕР</button>
+  </div>
+</div>
+
+<div id="radio" class="hidden">
+  <div class="row" style="display:flex;justify-content:space-between;align-items:center"><span class="small">РАЦИЯ · Аня · каждое слово слышно в квартире</span><button class="btn" id="radioClose" style="min-width:0;min-height:36px;padding:4px 12px">✕</button></div>
+  <div id="radioLog"></div>
+  <form id="radioForm" autocomplete="off"><input id="radioInput" type="text" maxlength="200" placeholder="Сказать Ане…" enterkeyhint="send"><button class="btn" type="submit">⏎</button></form>
+</div>
+
+<div id="menu" class="screen">
+  <h1>ПЛОТНОСТЬ</h1>
+  <p>Сестра пропала месяц назад. В её квартире нет света — есть только лидар-сканер. Точки показывают стены. Пустота показывает его.</p>
+  <button class="btn main" id="startBtn">НАЧАТЬ</button>
+  <button class="btn" id="settingsBtn">ИИ · OPENROUTER</button>
+  <p class="small" id="menuAi"></p>
+  <p class="small">Наушники обязательны. Телефон: слева шаги, справа обзор. Компьютер: WASD, мышь, ЛКМ — веер, ПКМ — луч, пробел — импульс, Q — сравнение, R — рация.</p>
+</div>
+
+<div id="pause" class="screen hidden">
+  <div class="panel">
+    <h2>ПАУЗА</h2>
+    <button class="btn main" id="resumeBtn">ПРОДОЛЖИТЬ</button>
+    <div><div class="small">ЗАПИСКИ АНИ</div><ol class="journal" id="journal"></ol></div>
+    <div class="row"><button class="btn" id="pSettingsBtn">ИИ</button><button class="btn" id="restartBtn">ЗАНОВО</button></div>
+    <p class="small">ВЕЕР — быстро, но громко. ЛУЧ — тихо, читает записки (жёлтые точки). ИМПУЛЬС — вся комната сразу, и он точно услышит. СРАВН — красным то, что сдвинулось с прошлого скана. Тёмная дыра в облаке, которая не похожа на мебель, — это он.</p>
+  </div>
+</div>
+
+<div id="settings" class="screen hidden">
+  <div class="panel">
+    <h2>ИИ · OPENROUTER</h2>
+    <p class="small">ИИ ведёт игру как режиссёр (шёпот, стуки, сдвиги мебели, Жилец), отвечает голосом Ани по рации и пишет эпилог. Без ключа работают заготовки.</p>
+    <label>API-ключ (openrouter.ai → Keys)<input id="keyInput" type="password" placeholder="sk-or-v1-…" autocomplete="off" spellcheck="false"></label>
+    <label>Модель<input id="modelInput" type="text" list="modelList" spellcheck="false" autocapitalize="off"><datalist id="modelList"></datalist></label>
+    <div class="row"><button class="btn" id="loadModelsBtn">СПИСОК МОДЕЛЕЙ</button><button class="btn" id="testBtn">ПРОВЕРИТЬ</button></div>
+    <div class="small" id="testStatus"></div>
+    <label class="check"><input id="ttsInput" type="checkbox"> Голос Ани (синтез речи)</label>
+    <p class="small">Ключ хранится только в этом браузере и уходит только на openrouter.ai. Поставь на ключ лимит расходов в настройках OpenRouter. Один ход режиссёра — около 700 токенов.</p>
+    <div class="row"><button class="btn" id="clearKeyBtn">УДАЛИТЬ КЛЮЧ</button><button class="btn main" id="saveBtn">ГОТОВО</button></div>
+  </div>
+</div>
+
+<div id="end" class="screen hidden">
+  <h1 id="endTitle" style="font-size:clamp(26px,8vw,48px)"></h1>
+  <p id="endText" style="color:var(--text);font-size:16px"></p>
+  <p class="small" id="endStats"></p>
+  <button class="btn main" id="againBtn">ЕЩЁ РАЗ</button>
+</div>
+
+<script type="module" src="game.js"></script>
+</body>
+</html>
