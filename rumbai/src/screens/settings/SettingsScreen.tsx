@@ -148,7 +148,7 @@ export default function SettingsScreen() {
 
   const storage = getStorageInfo();
   const cloudStatus =
-    cloud.state === 'ok' ? (cloud.configured ? `Доступен · ${prettyClaude(cloud.model ?? '')}` : 'Не настроен на сервере') : cloud.state === 'unreachable' ? 'Сервер недоступен' : 'Проверка…';
+    cloud.state === 'ok' ? (cloud.configured ? `Доступен · ${prettyClaude(cloud.model ?? '')}` : 'Не настроен на сервере') : cloud.state === 'unreachable' ? 'Сервер недоступен' : cloud.state === 'static' ? 'Нет сервера (GitHub Pages)' : 'Проверка…';
 
   return (
     <>

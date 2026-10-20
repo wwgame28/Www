@@ -38,4 +38,4 @@
 
 ## RUMBAI
 
-В папке [`rumbai/`](rumbai/README.md) лежит отдельный проект: персональный AI-командный центр (PWA). Инструкции — в его README.
+В папке [`rumbai/`](rumbai/README.md) лежит отдельный проект: персональный AI-командный центр (PWA). Инструкции — в его README. Опубликованная версия: https://wwgame28.github.io/Www/rumbai-app/

@@ -16,7 +16,8 @@
     "lint": "eslint .",
     "test": "node --experimental-strip-types --test 'server/*.test.ts' 'src/**/*.test.ts'",
     "test:e2e": "playwright test",
-    "check": "npm run typecheck && npm run lint && npm test && npm run build"
+    "check": "npm run typecheck && npm run lint && npm test && npm run build",
+    "build:pages": "tsc -b && VITE_CLOUD=off vite build --base=/Www/rumbai-app/ --outDir ../rumbai-app --emptyOutDir"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

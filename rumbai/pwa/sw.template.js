@@ -1,5 +1,7 @@
 /* RUMBAI service worker. Generated at build time from pwa/sw.template.js. */
 const VERSION = '__VERSION__';
+/** URL path the app is served under, e.g. '/' or '/Www/rumbai-app/'. */
+const BASE = '__BASE__';
 const SHELL_CACHE = `rumbai-shell-${VERSION}`;
 const RUNTIME_CACHE = 'rumbai-runtime';
 /** Small files needed to start offline. */
@@ -39,8 +41,8 @@ async function networkFirstNavigation(request) {
     clearTimeout(timer);
     return res;
   } catch {
-    const shell = await caches.match('/index.html');
-    return shell ?? (await caches.match('/offline.html')) ?? Response.error();
+    const shell = await caches.match(`${BASE}index.html`);
+    return shell ?? (await caches.match(`${BASE}offline.html`)) ?? Response.error();
   }
 }
 
@@ -73,10 +75,12 @@ self.addEventListener('fetch', (event) => {
   // Model weights and other cross-origin downloads are managed by WebLLM's own cache.
   if (url.origin !== self.location.origin) return;
   // API calls are never cached.
-  if (url.pathname.startsWith('/api/')) return;
+  if (url.pathname.startsWith(`${BASE}api/`)) return;
+  // Leave other sites on the same origin (e.g. a neighbouring app on GitHub Pages) alone.
+  if (!url.pathname.startsWith(BASE)) return;
   if (request.mode === 'navigate') {
     event.respondWith(networkFirstNavigation(request));
-  } else if (url.pathname.startsWith('/assets/')) {
+  } else if (url.pathname.startsWith(`${BASE}assets/`)) {
     event.respondWith(cacheFirst(request));
   } else {
     event.respondWith(staleWhileRevalidate(request));

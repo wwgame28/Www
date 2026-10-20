@@ -24,7 +24,7 @@ export function registerServiceWorker() {
     set({ controlled: true });
   });
   navigator.serviceWorker
-    .register('/sw.js', { scope: '/' })
+    .register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL })
     .then((reg) => {
       const track = (sw: ServiceWorker | null) => {
         sw?.addEventListener('statechange', () => {

@@ -8,14 +8,22 @@ export class CloudError extends Error {
   }
 }
 
+/** Set at build time for static hosting (GitHub Pages), where there is no RUMBAI server. */
+// `import.meta.env` exists only in Vite builds; unit tests run this module in plain Node.
+const env = (import.meta as ImportMeta & { env?: { VITE_CLOUD?: string; BASE_URL?: string } }).env;
+export const CLOUD_AVAILABLE = env?.VITE_CLOUD !== 'off';
+const API = `${env?.BASE_URL ?? '/'}api`;
+
 export type CloudHealth =
   | { state: 'unknown' }
+  | { state: 'static' }
   | { state: 'unreachable'; message: string }
   | { state: 'ok'; configured: boolean; model: string | null; checkedAt: number };
 
 export async function fetchHealth(signal?: AbortSignal): Promise<CloudHealth> {
+  if (!CLOUD_AVAILABLE) return { state: 'static' };
   try {
-    const res = await fetch('/api/health', { signal: signal ?? AbortSignal.timeout(6000), cache: 'no-store' });
+    const res = await fetch(`${API}/health`, { signal: signal ?? AbortSignal.timeout(6000), cache: 'no-store' });
     if (!res.ok || !res.headers.get('content-type')?.includes('application/json'))
       return { state: 'unreachable', message: `Сервер ответил ${res.status}` };
     const body = (await res.json()) as HealthResponse;
@@ -29,7 +37,7 @@ export async function fetchHealth(signal?: AbortSignal): Promise<CloudHealth> {
 export async function* streamCloud(req: ChatRequest, signal: AbortSignal): AsyncGenerator<StreamEvent> {
   let res: Response;
   try {
-    res = await fetch('/api/chat', {
+    res = await fetch(`${API}/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(req),

@@ -141,6 +141,7 @@ export function AiStatus() {
   let cloudText = 'Проверка…';
   let cloudTone: 'ok' | 'warn' | 'off' = 'off';
   if (!online) cloudText = 'Нет сети';
+  else if (cloud.state === 'static') cloudText = 'Недоступно в версии без сервера';
   else if (cloud.state === 'unreachable') cloudText = 'Сервер недоступен';
   else if (cloud.state === 'ok') {
     cloudText = cloud.configured ? `${prettyClaude(cloud.model ?? '')} · доступен` : 'Не настроен на сервере';

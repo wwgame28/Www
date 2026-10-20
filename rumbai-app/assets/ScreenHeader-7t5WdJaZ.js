@@ -1,0 +1,1 @@
+import{at as e}from"./controls-DqvCVLG-.js";var t=e();function n({title:e,subtitle:n,actions:r}){return(0,t.jsxs)(`header`,{className:`screen-header`,children:[(0,t.jsxs)(`div`,{className:`grow`,children:[(0,t.jsx)(`h1`,{children:e}),n&&(0,t.jsx)(`p`,{className:`screen-subtitle`,children:n})]}),r&&(0,t.jsx)(`div`,{className:`row`,children:r})]})}export{n as t};

@@ -33,6 +33,8 @@ export function useEngineReadiness(engine: Engine): Readiness {
   }, [engine, modelId, local.phase]);
 
   if (engine === 'cloud') {
+    if (cloud.state === 'static')
+      return { ready: false, label: 'Облако недоступно в этой версии', detail: 'Версия на GitHub Pages работает без сервера, поэтому Claude здесь не подключить. Локальный режим работает.', tone: 'off' };
     if (cloud.state === 'unknown') return { ready: false, label: 'Проверяем сервер…', tone: 'off' };
     if (cloud.state === 'unreachable') return { ready: false, label: 'Сервер RUMBAI недоступен', detail: cloud.message, action: { label: 'Проверить снова', kind: 'retry-health' }, tone: 'warn' };
     if (!cloud.configured)
