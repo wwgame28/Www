@@ -35,3 +35,7 @@
 - Приключение и лор: `docs/superpowers/specs/2026-10-12-story-mode-design.md`, `…-seven-crowns-lore.md`, `…-universe-lore.md`
 - Разбор игры и список улучшений: `docs/review/2026-10-12-game-review.md`
 - Как зарабатывать на игре (Яндекс Игры, CrazyGames, Poki): `docs/monetization.md`
+
+## RUMBAI
+
+В папке [`rumbai/`](rumbai/README.md) лежит отдельный проект: персональный AI-командный центр (PWA). Инструкции — в его README. Опубликованная версия: https://wwgame28.github.io/Www/rumbai-app/
