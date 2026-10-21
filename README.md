@@ -35,3 +35,4 @@
 - Приключение и лор: `docs/superpowers/specs/2026-10-12-story-mode-design.md`, `…-seven-crowns-lore.md`, `…-universe-lore.md`
 - Разбор игры и список улучшений: `docs/review/2026-10-12-game-review.md`
 - Как зарабатывать на игре (Яндекс Игры, CrazyGames, Poki): `docs/monetization.md`
+- Курс Unreal Engine 5 на Blueprints (от нуля до своей игры): `docs/unreal-engine/README.md`
