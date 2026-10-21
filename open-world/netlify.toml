@@ -5,7 +5,5 @@
 [build.environment]
   NODE_VERSION = "22"
 
-[[headers]]
-  for = "/assets/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
+# Заголовки (долгий кэш для файлов с хешем в имени) — в public/_headers:
+# так они работают и при сборке на Netlify, и при ручной загрузке папки dist.
