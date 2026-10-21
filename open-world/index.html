@@ -128,37 +128,41 @@
       <div class="card settings-card">
         <h2 id="settings-title" class="screen-title">Настройки</h2>
         <div class="settings-list">
-          <div class="setting">
-            <div class="setting-head"><label for="set-view">Дальность прорисовки</label><output id="out-view"></output></div>
-            <input id="set-view" type="range" min="3" max="10" step="1" />
-          </div>
-          <div class="setting">
-            <div class="setting-head"><span id="lbl-quality">Качество</span></div>
-            <div class="segmented" role="radiogroup" aria-labelledby="lbl-quality">
-              <button role="radio" data-quality="low">Низкое</button>
-              <button role="radio" data-quality="medium">Среднее</button>
-              <button role="radio" data-quality="high">Высокое</button>
+          <div class="settings-col">
+            <div class="setting">
+              <div class="setting-head"><label for="set-view">Дальность прорисовки</label><output id="out-view"></output></div>
+              <input id="set-view" type="range" min="3" max="10" step="1" />
             </div>
+            <div class="setting">
+              <div class="setting-head"><span id="lbl-quality">Качество</span></div>
+              <div class="segmented" role="radiogroup" aria-labelledby="lbl-quality">
+                <button role="radio" data-quality="low">Низкое</button>
+                <button role="radio" data-quality="medium">Среднее</button>
+                <button role="radio" data-quality="high">Высокое</button>
+              </div>
+            </div>
+            <div class="setting">
+              <div class="setting-head"><label id="lbl-sens" for="set-sens">Чувствительность мыши</label><output id="out-sens"></output></div>
+              <input id="set-sens" type="range" min="0.3" max="3" step="0.1" />
+            </div>
+            <label class="toggle"><span>Инвертировать вертикаль</span><input id="set-invert" type="checkbox" /><i></i></label>
           </div>
-          <div class="setting">
-            <div class="setting-head"><label for="set-sens">Чувствительность мыши</label><output id="out-sens"></output></div>
-            <input id="set-sens" type="range" min="0.3" max="3" step="0.1" />
+          <div class="settings-col">
+            <div class="setting">
+              <div class="setting-head"><label for="set-volume">Громкость</label><output id="out-volume"></output></div>
+              <input id="set-volume" type="range" min="0" max="100" step="5" />
+            </div>
+            <div class="setting">
+              <div class="setting-head"><label for="set-ambience">Звуки природы</label><output id="out-ambience"></output></div>
+              <input id="set-ambience" type="range" min="0" max="100" step="5" />
+            </div>
+            <div class="setting">
+              <div class="setting-head"><label for="set-effects">Шаги и всплески</label><output id="out-effects"></output></div>
+              <input id="set-effects" type="range" min="0" max="100" step="5" />
+            </div>
+            <label class="toggle"><span>Уменьшить движение</span><input id="set-motion" type="checkbox" /><i></i></label>
+            <label class="toggle"><span>Показывать FPS и отладку</span><input id="set-debug" type="checkbox" /><i></i></label>
           </div>
-          <div class="setting">
-            <div class="setting-head"><label for="set-volume">Громкость</label><output id="out-volume"></output></div>
-            <input id="set-volume" type="range" min="0" max="100" step="5" />
-          </div>
-          <div class="setting">
-            <div class="setting-head"><label for="set-ambience">Звуки природы</label><output id="out-ambience"></output></div>
-            <input id="set-ambience" type="range" min="0" max="100" step="5" />
-          </div>
-          <div class="setting">
-            <div class="setting-head"><label for="set-effects">Шаги и всплески</label><output id="out-effects"></output></div>
-            <input id="set-effects" type="range" min="0" max="100" step="5" />
-          </div>
-          <label class="toggle"><span>Уменьшить движение</span><input id="set-motion" type="checkbox" /><i></i></label>
-          <label class="toggle"><span>Инвертировать вертикаль</span><input id="set-invert" type="checkbox" /><i></i></label>
-          <label class="toggle"><span>Показывать FPS и отладку</span><input id="set-debug" type="checkbox" /><i></i></label>
         </div>
         <button id="btn-settings-done" class="btn btn-primary">Готово</button>
       </div>

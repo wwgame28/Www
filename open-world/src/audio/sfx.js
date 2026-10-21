@@ -6,7 +6,7 @@ const STEP = {
   forest: { type: 'bandpass', f: 1400, q: 0.8, dur: 0.12, peak: 0.42, attack: 0.008, twig: true },
   sand: { type: 'bandpass', f: 3000, q: 0.5, dur: 0.17, peak: 0.3, attack: 0.025 },
   snow: { type: 'lowpass', f: 2600, q: 0.6, dur: 0.16, peak: 0.36, attack: 0.01, crunch: true },
-  rock: { type: 'highpass', f: 900, q: 0.7, dur: 0.06, peak: 0.45, attack: 0.002, thump: 120 },
+  rock: { type: 'highpass', f: 900, q: 0.7, dur: 0.06, peak: 0.3, attack: 0.002, thump: 120 },
   water: { type: 'bandpass', f: 900, q: 0.9, dur: 0.28, peak: 0.5, attack: 0.02, sweep: 420 },
 };
 
@@ -58,7 +58,7 @@ export class Sfx {
     const jitter = 0.92 + Math.random() * 0.16; // ±8% высоты тона
     const peak = p.peak * this.level * (run ? 1.25 : 1) * loud;
     this.noiseBurst(t, p.dur, p.type, p.f * jitter, p.q, peak, p.attack, jitter, p.sweep ? p.sweep * jitter : 0);
-    if (p.thump) this.tone(t, 0.08, p.thump * jitter, peak * 0.6, 'sine', p.thump * 0.6);
+    if (p.thump) this.tone(t, 0.08, p.thump * jitter, peak * 0.35, 'sine', p.thump * 0.6);
     if (p.crunch) {
       for (let i = 1; i <= 3; i++) this.noiseBurst(t + i * 0.022, 0.03, 'highpass', 2500 * jitter, 0.8, peak * 0.5, 0.002);
     }
@@ -76,7 +76,7 @@ export class Sfx {
     if (!this.engine.ready) return;
     const k = Math.min(1.6, 0.6 + impact / 10);
     const t = this.ctx.currentTime + 0.005;
-    this.tone(t, 0.14, 95, 0.22 * this.level * k, 'sine', 55);
+    this.tone(t, 0.14, 95, 0.12 * this.level * k, 'sine', 55);
     this.step(surface, true, k);
   }
 
@@ -97,12 +97,12 @@ export class Sfx {
   fly(on) {
     if (!this.engine.ready) return;
     const t = this.ctx.currentTime + 0.005;
-    this.noiseBurst(t, 0.5, 'bandpass', on ? 400 : 1600, 1.2, 0.18 * this.level, 0.12, 1, on ? 1800 : 300);
+    this.noiseBurst(t, 0.5, 'bandpass', on ? 400 : 1600, 1.2, 0.36 * this.level, 0.12, 1, on ? 1800 : 300);
   }
 
   click() {
     if (!this.engine.ready) return;
     const t = this.ctx.currentTime + 0.002;
-    this.tone(t, 0.05, 880, 0.08, 'triangle', 640);
+    this.tone(t, 0.05, 880, 0.14, 'triangle', 640);
   }
 }

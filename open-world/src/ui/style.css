@@ -356,13 +356,28 @@ body.is-touch .desktop-only {
   width: min(460px, 100%);
 }
 .settings-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 14px;
   max-height: min(62vh, 560px);
   overflow-y: auto;
   padding-right: 4px;
   margin-right: -4px;
+  touch-action: pan-y;
+}
+.settings-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+@media (min-width: 720px) {
+  .settings-card {
+    width: min(780px, 100%);
+  }
+  .settings-list {
+    grid-template-columns: 1fr 1fr;
+    column-gap: 32px;
+    max-height: none;
+  }
 }
 .setting {
   display: flex;

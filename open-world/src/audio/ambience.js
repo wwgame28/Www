@@ -100,9 +100,9 @@ export class Ambience {
     let wind = A.wind.base + alt * A.wind.altitude + fly * A.wind.flight + this.gust * A.wind.gust;
     if (s.biome === 'forest') wind *= 0.7;
     if (s.biome === 'snow' || s.biome === 'mountains') wind *= 1.3;
-    this.windGain.gain.setTargetAtTime(Math.min(0.5, wind), t, 0.4);
+    this.windGain.gain.setTargetAtTime(Math.min(A.wind.max, wind), t, 0.4);
     this.windFilter.frequency.setTargetAtTime(320 + this.gust * 380 + fly * 9 + alt * 1.5, t, 0.5);
-    this.whistleGain.gain.setTargetAtTime(Math.min(0.08, Math.max(0, alt - 60) * 0.0006 + fly * 0.0009), t, 0.6);
+    this.whistleGain.gain.setTargetAtTime(Math.min(0.25, Math.max(0, alt - 60) * 0.0018 + fly * 0.0027), t, 0.6);
 
     const surf = s.swimming ? 1 : s.nearWater;
     this.surfGain.gain.setTargetAtTime(surf * A.surf.level, t, 0.6);

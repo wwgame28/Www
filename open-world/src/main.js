@@ -20,6 +20,7 @@ const $ = (id) => document.getElementById(id);
 const SEA = CONFIG.world.seaLevel;
 const isTouchDevice = matchMedia('(pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && matchMedia('(hover: none)').matches);
 document.body.classList.toggle('is-touch', isTouchDevice);
+if (isTouchDevice) $('lbl-sens').textContent = 'Чувствительность обзора';
 
 // ---------- Настройки и сохранение ----------
 const saved = loadSave();
@@ -551,6 +552,10 @@ onClick('btn-pause-settings', () => {
 onClick('btn-pause-new', newWorld);
 onClick('btn-menu', () => {
   persist();
+  // в меню камера облетает место, где остановился игрок
+  const p = player.pos;
+  menuCam.focus.set(p.x, Math.max(world.terrain.height(p.x, p.z), SEA), p.z);
+  menuCam.angle = player.yaw;
   setState('menu');
 });
 onClick('btn-settings-done', () => {
@@ -688,5 +693,6 @@ window.__game = {
   settings,
   camera,
   renderer,
+  audio,
   persist,
 };
