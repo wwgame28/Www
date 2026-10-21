@@ -74,13 +74,16 @@ ${WAVES_GLSL}`,
         `#include <color_fragment>
 float grain = vnoise(vWorldPos.xz * 1.7) * 0.6 + vnoise(vWorldPos.xz * 0.31) * 0.4;
 diffuseColor.rgb *= 0.92 + 0.16 * grain;
-float d = vWorldPos.y - (uSea + waveHeight(vWorldPos.xz, uTime));
-float band = 1.0 - smoothstep(0.02, 0.3, abs(d + 0.03));
-float foamN = vnoise(vWorldPos.xz * 1.3 + vec2(uTime * 0.6, -uTime * 0.4));
-diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.94, 0.96), band * smoothstep(0.25, 0.7, foamN) * uFoam);`,
+// пена считается только у кромки воды — остальная земля не платит за волны
+if (abs(vWorldPos.y - uSea) < 0.7) {
+  float d = vWorldPos.y - (uSea + waveHeight(vWorldPos.xz, uTime));
+  float band = 1.0 - smoothstep(0.02, 0.3, abs(d + 0.03));
+  float foamN = vnoise(vWorldPos.xz * 1.3 + vec2(uTime * 0.6, -uTime * 0.4));
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.94, 0.96), band * smoothstep(0.25, 0.7, foamN) * uFoam);
+}`,
       );
   };
-  m.customProgramCacheKey = () => 'terrain-v1';
+  m.customProgramCacheKey = () => 'terrain-v2';
   return m;
 }
 

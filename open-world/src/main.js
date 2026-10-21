@@ -491,17 +491,28 @@ function sampleNearWater(px, pz) {
   return Math.min(1, (wet / total) * 1.6);
 }
 
+const ambient = { altitude: 0, speed: 0, flying: false, swimming: false, nearWater: 0, daylight: 1, biome: 'plains' };
+const menuBiome = { key: 'plains', timer: 0 };
 function ambienceState(pos, inPlay) {
-  const b = inPlay ? BIOMES[biomeState.id] : BIOMES[world.biomeAt(pos.x, pos.z)];
-  return {
-    altitude: pos.y - SEA,
-    speed: inPlay ? (player.flying ? player.vel.length() : player.speed) : 0,
-    flying: inPlay && player.flying,
-    swimming: inPlay && player.swimming,
-    nearWater: inPlay ? nearWater : 0.3,
-    daylight: world.sky.daylight,
-    biome: b ? b.key : 'plains',
-  };
+  let key;
+  if (inPlay) key = BIOMES[biomeState.id]?.key;
+  else {
+    // в меню биом под камерой меняется медленно — не пересчитываем каждый кадр
+    menuBiome.timer -= 1;
+    if (menuBiome.timer <= 0) {
+      menuBiome.timer = 30;
+      menuBiome.key = BIOMES[world.biomeAt(pos.x, pos.z)].key;
+    }
+    key = menuBiome.key;
+  }
+  ambient.altitude = pos.y - SEA;
+  ambient.speed = inPlay ? (player.flying ? player.vel.length() : player.speed) : 0;
+  ambient.flying = inPlay && player.flying;
+  ambient.swimming = inPlay && player.swimming;
+  ambient.nearWater = inPlay ? nearWater : 0.3;
+  ambient.daylight = world.sky.daylight;
+  ambient.biome = key || 'plains';
+  return ambient;
 }
 
 // ---------- Адаптивное разрешение: держим FPS, жертвуя чёткостью ----------

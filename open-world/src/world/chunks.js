@@ -5,7 +5,8 @@ import { buildChunkIndex, COLLIDER_STRIDE } from './chunkgen.js';
 import { createTerrainMaterial } from './materials.js';
 
 const S = CONFIG.world.chunkSize;
-const keyOf = (cx, cz) => `${cx},${cz}`;
+// числовой ключ чанка: без строк — без мусора для сборщика каждый кадр
+const keyOf = (cx, cz) => (cx + 32768) * 65536 + (cz + 32768);
 
 function nearestDist(cx, cz, fx, fz) {
   const dx = Math.max(cx * S - fx, 0, fx - (cx + 1) * S);
@@ -31,6 +32,8 @@ export class ChunkManager {
     this.limits = { view: 384, lodScale: 1, vegDensity: 1, grassDensity: 1, treeNear: 100, treeFar: 320, smallFar: 90, flowerFar: 56 };
     this.vegDirty = true;
     this.vegTimer = 0;
+    this.scanTimer = 0;
+    this.scanAt = { x: NaN, z: NaN, dirX: 0, dirZ: 0 };
     this.vegOrigin = { x: NaN, z: NaN };
     this.stats = { loaded: 0, meshes: 0, queued: 0, inFlight: 0, lods: [0, 0, 0, 0, 0], genMs: 0, grass: 0 };
     this.workers = [];
@@ -58,6 +61,7 @@ export class ChunkManager {
     this.ready.length = 0;
     for (const slot of this.workers) slot.w.postMessage({ type: 'init', seed, gen: this.gen });
     this.vegDirty = true;
+    this.scanTimer = 0;
   }
 
   setLimits(q, viewChunks) {
@@ -83,6 +87,7 @@ export class ChunkManager {
       for (const ch of this.chunks.values()) if (ch.lod === 0) ch.lod = -2; // перезапросить LOD0 с новой травой
     }
     this.vegDirty = true;
+    this.scanTimer = 0;
   }
 
   lodFor(d, current) {
@@ -106,13 +111,26 @@ export class ChunkManager {
     const len = Math.hypot(dirX, dirZ) || 1;
     this.focus.dirX = dirX / len;
     this.focus.dirZ = dirZ / len;
-    this.schedule();
+    // полный проход по сетке — только когда игрок сместился или повернулся, либо раз в 0,25 с
+    this.scanTimer -= dt;
+    const A = this.scanAt;
+    const moved = Math.hypot(fx - A.x, fz - A.z);
+    const turned = this.focus.dirX * A.dirX + this.focus.dirZ * A.dirZ < 0.97;
+    if (!(moved < 1.5) || turned || this.scanTimer <= 0) {
+      this.scanTimer = 0.25;
+      A.x = fx;
+      A.z = fz;
+      A.dirX = this.focus.dirX;
+      A.dirZ = this.focus.dirZ;
+      this.schedule();
+    }
     this.dispatch();
     this.applyReady();
     this.vegTimer -= dt;
     if (this.vegTimer <= 0) {
       this.vegTimer = CONFIG.streaming.vegRebuildSec;
       this.maybeRebuildVegetation();
+      this.watchdog(performance.now());
     }
   }
 
@@ -188,6 +206,8 @@ export class ChunkManager {
         const ch = job.ch;
         if (this.chunks.get(ch.key) !== ch) continue;
         job.sent = true;
+        job.slot = slot;
+        job.sentAt = performance.now();
         const id = this.nextId++;
         this.jobs.set(id, job);
         slot.busy++;
@@ -209,12 +229,41 @@ export class ChunkManager {
   }
 
   onMessage(slot, msg) {
-    slot.busy = Math.max(0, slot.busy - 1);
     const job = this.jobs.get(msg.id);
+    if (!job) return; // уже списано сторожем как потерянное
+    slot.busy = Math.max(0, slot.busy - 1);
     this.jobs.delete(msg.id);
-    if (!job || msg.gen !== this.gen || msg.type === 'skip') return;
+    if (msg.type === 'error') {
+      console.error('Ошибка генерации чанка:', msg.message);
+      this.forget(job);
+      return;
+    }
+    if (msg.gen !== this.gen || msg.type === 'skip') return;
     this.stats.genMs = this.stats.genMs * 0.9 + (msg.ms || 0) * 0.1;
     this.ready.push({ job, msg });
+  }
+
+  // Задание без ответа: снять отметки «в работе», чтобы следующий проход запросил чанк заново
+  forget(job) {
+    const ch = job.ch;
+    if (job.type === 'terrain') {
+      if (ch.qTerrain === job) ch.qTerrain = null;
+      if (ch.pendingLod === job.lod) ch.pendingLod = -1;
+    } else {
+      if (ch.qVeg === job) ch.qVeg = null;
+      ch.vegPending = false;
+    }
+    this.scanTimer = 0;
+  }
+
+  // Сторож: ответ, который не пришёл за 15 с, считается потерянным
+  watchdog(now) {
+    for (const [id, job] of this.jobs) {
+      if (now - job.sentAt < 15000) continue;
+      this.jobs.delete(id);
+      job.slot.busy = Math.max(0, job.slot.busy - 1);
+      this.forget(job);
+    }
   }
 
   applyReady() {

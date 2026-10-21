@@ -16,6 +16,15 @@ self.onmessage = (e) => {
     self.postMessage({ type: 'skip', id: m.id, gen: m.gen });
     return;
   }
+  try {
+    run(m);
+  } catch (err) {
+    // ответ обязателен: иначе главный поток будет вечно ждать этот чанк
+    self.postMessage({ type: 'error', id: m.id, gen: m.gen, message: String((err && err.message) || err) });
+  }
+};
+
+function run(m) {
   const t0 = performance.now();
   if (m.type === 'terrain') {
     const r = buildTerrainChunk(terrain, m.cx, m.cz, m.lod, m.grass);
@@ -28,4 +37,4 @@ self.onmessage = (e) => {
     for (const t of Object.values(r.types)) transfer.push(t.matrices.buffer, t.colors.buffer);
     self.postMessage({ type: 'veg', id: m.id, gen: m.gen, cx: m.cx, cz: m.cz, ms: performance.now() - t0, ...r }, transfer);
   }
-};
+}
