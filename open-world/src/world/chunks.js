@@ -306,10 +306,27 @@ export class ChunkManager {
     ch.veg = null;
   }
 
+  // Пересборка нужна, только когда чанк сменил «ступень» видимости растительности
+  // (ближние деревья / дальние / мелочь / цветы) или пришли и ушли данные
+  vegBand(d) {
+    const L = this.limits;
+    return (d <= L.treeNear ? 1 : 0) | (d <= L.treeFar ? 2 : 0) | (d <= L.smallFar ? 4 : 0) | (d <= L.flowerFar ? 8 : 0);
+  }
+
   maybeRebuildVegetation() {
     const { x: fx, z: fz } = this.focus;
+    let changed = this.vegDirty;
+    for (const ch of this.chunks.values()) {
+      if (!ch.veg) continue;
+      const band = this.vegBand(ch.dist);
+      if (band !== ch.vegBand) {
+        ch.vegBand = band;
+        changed = true;
+      }
+    }
+    // далеко от начала координат пересборки — обновить его ради точности float32
     const moved = Math.hypot(fx - this.vegOrigin.x, fz - this.vegOrigin.z);
-    if (!this.vegDirty && !(moved > 12)) return;
+    if (!changed && !(moved > 2048)) return;
     const list = [];
     for (const ch of this.chunks.values()) if (ch.veg) list.push(ch);
     const ox = Math.floor(fx / S) * S;

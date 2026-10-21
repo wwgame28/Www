@@ -82,7 +82,7 @@ export const CONFIG = {
     rules: {
       plains: [['oak', 0.03], ['birch', 0.012], ['bush', 0.05], ['rock', 0.012]],
       forest: [['pine', 0.2], ['oak', 0.075], ['birch', 0.06], ['bush', 0.06], ['rock', 0.015]],
-      desert: [['cactus', 0.03], ['deadBush', 0.05], ['rock', 0.02]],
+      desert: [['cactus', 0.05], ['deadBush', 0.07], ['rock', 0.025]],
       beach: [['palm', 0.05], ['rock', 0.012]],
       mountains: [['pine', 0.04], ['rock', 0.09]],
       snow: [['snowPine', 0.045], ['rock', 0.05]],
@@ -221,12 +221,13 @@ export const CONFIG = {
     startTime: 0.32, // 0 — полночь, 0.5 — полдень
   },
 
+  // Уровни выставлены по замерам анализатором: фон ≈ −30…−24 dBFS RMS, пики шагов ≈ −18 dBFS
   audio: {
-    wind: { base: 0.05, altitude: 0.0013, flight: 0.004, gust: 0.04 },
-    surf: { range: 70, level: 0.32 },
-    birds: { minGap: 1.4, maxGap: 6, level: 0.09 },
-    crickets: { level: 0.035, voices: 3 },
-    steps: { level: 0.45 },
+    wind: { base: 0.22, altitude: 0.0045, flight: 0.013, gust: 0.14, max: 0.9 },
+    surf: { range: 70, level: 2 },
+    birds: { minGap: 1.4, maxGap: 6, level: 0.3 },
+    crickets: { level: 0.07, voices: 3 },
+    steps: { level: 1.1 },
   },
 
   particles: { max: 160 },

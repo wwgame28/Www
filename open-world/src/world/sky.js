@@ -50,8 +50,10 @@ void main() {
   float md = max(dot(d, uMoonDir), 0.0);
   float disc = smoothstep(0.99955, 0.99975, md);
   col = mix(col, vec3(0.88, 0.91, 1.0), disc * uMoonVis);
-  col += vec3(0.45, 0.55, 0.8) * pow(md, 160.0) * 0.3 * uMoonVis;
-  col += (hash12(gl_FragCoord.xy) - 0.5) / 255.0;
+  // мягкий ореол: экспонента от угла, без «колец» от pow с большой степенью
+  float ang = acos(clamp(md, -1.0, 1.0));
+  col += vec3(0.38, 0.47, 0.72) * exp(-ang * 14.0) * 0.22 * uMoonVis;
+  col += (hash12(gl_FragCoord.xy) - 0.5) * (1.5 / 255.0);
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>

@@ -82,7 +82,7 @@ export class Clouds {
     this.count = 0;
     this.tile = 1800;
     this.white = new THREE.Color(1, 1, 1);
-    this.night = new THREE.Color(0.32, 0.38, 0.55);
+    this.night = new THREE.Color(0.05, 0.065, 0.12);
     this.tmp = new THREE.Color();
     this.m = new THREE.Matrix4();
     this.q = new THREE.Quaternion();
