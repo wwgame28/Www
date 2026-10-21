@@ -1,6 +1,6 @@
 // Web Worker генерации: главный поток только раскладывает готовые буферы по сценам.
 import { createTerrain } from './terrain.js';
-import { buildTerrainChunk, buildVegetationChunk } from './chunkgen.js';
+import { runJob } from './jobs.js';
 
 let terrain = null;
 let gen = -1;
@@ -17,24 +17,10 @@ self.onmessage = (e) => {
     return;
   }
   try {
-    run(m);
+    const { msg, transfer } = runJob(terrain, m);
+    self.postMessage(msg, transfer);
   } catch (err) {
     // ответ обязателен: иначе главный поток будет вечно ждать этот чанк
     self.postMessage({ type: 'error', id: m.id, gen: m.gen, message: String((err && err.message) || err) });
   }
 };
-
-function run(m) {
-  const t0 = performance.now();
-  if (m.type === 'terrain') {
-    const r = buildTerrainChunk(terrain, m.cx, m.cz, m.lod, m.grass);
-    const transfer = [r.positions.buffer, r.normals.buffer, r.colors.buffer];
-    if (r.grass) transfer.push(r.grass.matrices.buffer, r.grass.colors.buffer);
-    self.postMessage({ type: 'terrain', id: m.id, gen: m.gen, cx: m.cx, cz: m.cz, lod: m.lod, ms: performance.now() - t0, ...r }, transfer);
-  } else if (m.type === 'veg') {
-    const r = buildVegetationChunk(terrain, m.cx, m.cz, m.density);
-    const transfer = [r.colliders.buffer];
-    for (const t of Object.values(r.types)) transfer.push(t.matrices.buffer, t.colors.buffer);
-    self.postMessage({ type: 'veg', id: m.id, gen: m.gen, cx: m.cx, cz: m.cz, ms: performance.now() - t0, ...r }, transfer);
-  }
-}

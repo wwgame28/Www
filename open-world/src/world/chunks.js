@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { buildChunkIndex, COLLIDER_STRIDE } from './chunkgen.js';
 import { createTerrainMaterial } from './materials.js';
+import { createTerrain } from './terrain.js';
+import { runJob } from './jobs.js';
 
 const S = CONFIG.world.chunkSize;
 // числовой ключ чанка: без строк — без мусора для сборщика каждый кадр
@@ -37,18 +39,77 @@ export class ChunkManager {
     this.vegOrigin = { x: NaN, z: NaN };
     this.stats = { loaded: 0, meshes: 0, queued: 0, inFlight: 0, lods: [0, 0, 0, 0, 0], genMs: 0, grass: 0 };
     this.workers = [];
-    this.error = null;
+    this.inline = null;
     const n = Math.max(1, Math.min(CONFIG.streaming.workers, (navigator.hardwareConcurrency || 4) - 1));
-    for (let i = 0; i < n; i++) {
-      const w = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
-      const slot = { w, busy: 0 };
-      w.onmessage = (e) => this.onMessage(slot, e.data);
-      w.onerror = (e) => {
-        this.error = e.message || 'worker error';
-        console.error('Ошибка воркера генерации:', e.message || e);
-      };
-      this.workers.push(slot);
+    for (let i = 0; i < n; i++) this.spawnWorker();
+  }
+
+  spawnWorker() {
+    let w;
+    try {
+      w = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+    } catch (err) {
+      this.useInline(err);
+      return;
     }
+    const slot = { w, busy: 0, alive: true, ok: false };
+    w.onmessage = (e) => {
+      slot.ok = true;
+      this.onMessage(slot, e.data);
+    };
+    w.onerror = (e) => {
+      if (slot.ok) {
+        console.error('Ошибка воркера генерации:', e.message || e);
+        return;
+      }
+      // воркер не запустился (нет модульных воркеров, запрет политикой страницы) — считаем в основном потоке
+      e.preventDefault?.();
+      this.dropSlot(slot);
+      if (!this.workers.some((x) => x.alive)) this.useInline(e);
+    };
+    this.workers.push(slot);
+  }
+
+  dropSlot(slot) {
+    slot.alive = false;
+    slot.w.terminate();
+    for (const [id, job] of this.jobs) {
+      if (job.slot !== slot) continue;
+      this.jobs.delete(id);
+      this.forget(job);
+    }
+  }
+
+  // Запасной режим: те же задания в основном потоке, по одному за задачу цикла событий
+  useInline(reason) {
+    if (this.inline) return;
+    console.info('Web Worker недоступен — мир генерируется в основном потоке.', (reason && reason.message) || '');
+    const slot = { busy: 0, alive: true, ok: true, inline: true, terrain: null, gen: -1 };
+    slot.w = {
+      postMessage: (m) => {
+        if (m.type === 'init') {
+          slot.terrain = createTerrain(m.seed);
+          slot.gen = m.gen;
+          return;
+        }
+        setTimeout(() => {
+          let msg;
+          if (!slot.terrain || m.gen !== slot.gen) msg = { type: 'skip', id: m.id, gen: m.gen };
+          else {
+            try {
+              msg = runJob(slot.terrain, m).msg;
+            } catch (err) {
+              msg = { type: 'error', id: m.id, gen: m.gen, message: String((err && err.message) || err) };
+            }
+          }
+          this.onMessage(slot, msg);
+        }, 0);
+      },
+      terminate() {},
+    };
+    this.inline = slot;
+    this.workers.push(slot);
+    slot.w.postMessage({ type: 'init', seed: this.seed, gen: this.gen });
   }
 
   // Новый сид: всё старое уходит в пулы, воркеры получают новый мир
@@ -59,7 +120,7 @@ export class ChunkManager {
     this.chunks.clear();
     this.queue.length = 0;
     this.ready.length = 0;
-    for (const slot of this.workers) slot.w.postMessage({ type: 'init', seed, gen: this.gen });
+    for (const slot of this.workers) if (slot.alive) slot.w.postMessage({ type: 'init', seed, gen: this.gen });
     this.vegDirty = true;
     this.scanTimer = 0;
   }
@@ -199,8 +260,9 @@ export class ChunkManager {
   }
 
   dispatch() {
-    const max = CONFIG.streaming.inFlightPerWorker;
     for (const slot of this.workers) {
+      if (!slot.alive) continue;
+      const max = slot.inline ? 1 : CONFIG.streaming.inFlightPerWorker;
       while (slot.busy < max && this.queue.length) {
         const job = this.queue.shift();
         const ch = job.ch;
@@ -443,7 +505,8 @@ export class ChunkManager {
     }
     s.meshes = meshes;
     s.grass = grass;
-    s.workers = this.workers.length;
+    s.workers = this.workers.filter((x) => x.alive && !x.inline).length;
+    s.inline = !!this.inline;
     return s;
   }
 }

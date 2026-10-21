@@ -44,7 +44,7 @@ export class DebugOverlay {
     this.el.textContent = [
       `FPS ${this.fps.toFixed(0)}  кадр ${this.ms.toFixed(1)} мс  худший ${(this.worstMs || 0).toFixed(1)} мс`,
       `draw calls ${r.calls}  треугольников ${(r.triangles / 1000).toFixed(0)}k  разрешение ×${info.pixelRatio.toFixed(2)}`,
-      `чанки ${c.meshes}/${c.loaded}  LOD ${c.lods.join('/')}  очередь ${c.queued}  в работе ${c.inFlight}  воркеров ${c.workers}`,
+      `чанки ${c.meshes}/${c.loaded}  LOD ${c.lods.join('/')}  очередь ${c.queued}  в работе ${c.inFlight}  воркеров ${c.workers}${c.inline ? ' + основной поток' : ''}`,
       `генерация ${c.genMs.toFixed(1)} мс/чанк  трава ${c.grass}  растения ${info.instances}`,
       `геометрий ${info.memory.geometries}  текстур ${info.memory.textures}`,
       `x ${p.pos.x.toFixed(1)} y ${p.pos.y.toFixed(1)} z ${p.pos.z.toFixed(1)}  ${p.flying ? 'полёт' : p.swimming ? 'плывёт' : p.grounded ? 'на земле' : 'в воздухе'}`,

@@ -185,7 +185,7 @@ function startGame() {
     world.day = 1;
   }
   game.active = true;
-  if (!input.usingTouch && !isTouchDevice) input.requestLock();
+  requestMouseLook();
   setState('loading');
 }
 
@@ -200,8 +200,24 @@ function newWorld() {
 
 function resumeGame() {
   audio.unlock();
-  if (!input.usingTouch && !isTouchDevice) input.requestLock();
+  requestMouseLook();
   setState('play');
+}
+
+// Захват курсора для обзора мышью; если он недоступен (игра во фрейме) — подсказываем обзор перетаскиванием
+let dragHinted = false;
+function requestMouseLook() {
+  if (input.usingTouch || isTouchDevice) return;
+  input.requestLock().then(updateLockHint);
+}
+
+function updateLockHint() {
+  const desktop = !(input.usingTouch || isTouchDevice);
+  hud.setLockHint(stateName === 'play' && desktop && !input.locked && !input.lockFailed);
+  if (stateName === 'play' && desktop && input.lockFailed && !dragHinted) {
+    dragHinted = true;
+    hud.hint('Зажмите левую кнопку мыши и ведите — так можно осмотреться', 7);
+  }
 }
 
 // ---------- Состояния ----------
@@ -272,19 +288,22 @@ const states = {
       const touchMode = input.usingTouch || isTouchDevice;
       touch.setVisible(touchMode);
       touch.setFlying(player.flying);
-      hud.setLockHint(!touchMode && !input.locked);
       audio.setPaused(false);
       acc = 0;
       biomeState.id = -1;
       timers.hud = 0;
       if (firstPlay) {
         firstPlay = false;
-        hud.hint(
-          touchMode
-            ? 'Стик слева — идти, до края — бег. Свайп справа — осмотреться.'
-            : 'WASD — идти · Shift — бег · Space — прыжок · F — полёт · Esc — пауза',
-        );
+        let text = touchMode
+          ? 'Стик слева — идти, до края — бег. Свайп справа — осмотреться.'
+          : 'WASD — идти · Shift — бег · Space — прыжок · F — полёт · Esc — пауза';
+        if (!touchMode && input.lockFailed) {
+          text = 'WASD — идти · Space — прыжок · F — полёт · обзор: зажмите левую кнопку мыши и ведите';
+          dragHinted = true;
+        }
+        hud.hint(text);
       }
+      updateLockHint();
     },
     exit() {
       input.enabled = false;
@@ -574,7 +593,7 @@ onClick('btn-settings-done', () => {
   setState(settingsReturn);
 });
 onClick('btn-pause', () => setState('pause'));
-onClick('lock-hint', () => input.requestLock());
+onClick('lock-hint', requestMouseLook);
 onClick('btn-copy-seed', () => {
   const done = () => hud.toast('Сид скопирован');
   if (navigator.clipboard) navigator.clipboard.writeText(game.seedText).then(done, () => {});
@@ -604,13 +623,14 @@ seedInput.addEventListener('keydown', (e) => {
 });
 
 canvas.addEventListener('click', () => {
-  if (stateName === 'play' && !input.locked && !input.usingTouch && !isTouchDevice) input.requestLock();
+  if (stateName === 'play' && !input.locked && !input.lockFailed) requestMouseLook();
 });
 
 input.onLockChange = (locked) => {
   if (stateName === 'play' && !locked && !input.usingTouch) setState('pause');
-  hud.setLockHint(stateName === 'play' && !locked && !input.usingTouch && !isTouchDevice);
+  updateLockHint();
 };
+input.onLockError = updateLockHint;
 input.onAnyGesture = () => audio.unlock();
 
 window.addEventListener('keydown', (e) => {

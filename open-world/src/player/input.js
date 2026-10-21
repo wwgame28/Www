@@ -30,6 +30,8 @@ export class Input {
     this.touchMove = { x: 0, y: 0, run: false };
     this.enabled = false;
     this.locked = false;
+    this.lockFailed = false; // захват курсора недоступен (например, во фрейме) — обзор перетаскиванием
+    this.dragging = false;
     this.sensitivity = 1;
     this.invertY = false;
     this.usingTouch = false;
@@ -46,7 +48,22 @@ export class Input {
       this.locked = document.pointerLockElement === this.canvas;
       this.onLockChange?.(this.locked);
     });
-    document.addEventListener('pointerlockerror', () => this.onLockError?.());
+    document.addEventListener('pointerlockerror', () => {
+      if (window.self !== window.top) this.lockFailed = true;
+      this.onLockError?.();
+    });
+    // запасной обзор: зажать кнопку мыши и вести
+    canvas.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse' || e.button !== 0 || this.locked) return;
+      this.dragging = true;
+      canvas.setPointerCapture?.(e.pointerId);
+    });
+    const stopDrag = () => {
+      this.dragging = false;
+    };
+    canvas.addEventListener('pointerup', stopDrag);
+    canvas.addEventListener('pointercancel', stopDrag);
+    canvas.addEventListener('lostpointercapture', stopDrag);
     const gesture = (e) => {
       if (e.pointerType === 'touch') this.usingTouch = true;
       this.onAnyGesture?.(e);
@@ -69,7 +86,7 @@ export class Input {
   }
 
   onMouseMove(e) {
-    if (!this.enabled || !this.locked) return;
+    if (!this.enabled || !(this.locked || this.dragging)) return;
     // защита от известного скачка movementX сразу после захвата курсора
     if (Math.abs(e.movementX) > 300 || Math.abs(e.movementY) > 300) return;
     const k = CONFIG.player.look.mouse * this.sensitivity;
@@ -165,22 +182,35 @@ export class Input {
   }
 
   requestLock() {
-    if (this.usingTouch || !this.canvas.requestPointerLock) return Promise.resolve(false);
+    if (this.usingTouch || this.lockFailed) return Promise.resolve(false);
+    if (!this.canvas.requestPointerLock) {
+      this.lockFailed = true;
+      return Promise.resolve(false);
+    }
+    // во фрейме без allow-pointer-lock захват не дадут никогда — переходим на обзор перетаскиванием;
+    // на обычной странице отказ бывает временным (сразу после Esc), там пробуем снова при следующем клике
+    const failed = (err) => {
+      if (window.self !== window.top || /sandbox/i.test((err && err.message) || '')) this.lockFailed = true;
+      return false;
+    };
     try {
       const r = this.canvas.requestPointerLock({ unadjustedMovement: true });
-      if (r && r.catch) {
-        return r.then(
-          () => true,
-          () => {
-            // unadjustedMovement поддерживается не везде — пробуем без него
+      if (!r || !r.then) return Promise.resolve(true);
+      return r.then(
+        () => true,
+        (err) => {
+          if (!/unadjusted|NotSupported/i.test(`${err && err.name} ${err && err.message}`)) return failed(err);
+          // unadjustedMovement поддерживается не везде — пробуем без него
+          try {
             const r2 = this.canvas.requestPointerLock();
-            return r2 && r2.then ? r2.then(() => true, () => false) : true;
-          },
-        );
-      }
-      return Promise.resolve(true);
-    } catch {
-      return Promise.resolve(false);
+            return r2 && r2.then ? r2.then(() => true, failed) : true;
+          } catch (e2) {
+            return failed(e2);
+          }
+        },
+      );
+    } catch (err) {
+      return Promise.resolve(failed(err));
     }
   }
 
@@ -196,6 +226,7 @@ export class Input {
   }
 
   clear() {
+    this.dragging = false;
     this.down.clear();
     this.pressedKeys.clear();
     this.virtualHeld.clear();
