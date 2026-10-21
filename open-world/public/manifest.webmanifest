@@ -1,0 +1,17 @@
+{
+  "name": "Открытый мир",
+  "short_name": "Открытый мир",
+  "description": "Бесконечный генеративный ландшафт: океаны, леса, пустыни и горы, день и ночь.",
+  "lang": "ru",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#0d1626",
+  "theme_color": "#0d1626",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#0d1626" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Открытый мир" />
+    <title>Открытый мир — бесконечный генеративный ландшафт</title>
+    <meta name="description" content="Браузерная 3D-игра: бесконечный мир из шума с сидом — океаны, пляжи, леса, пустыни, горы и снежные вершины, смена дня и ночи. Гуляйте, плавайте и летайте." />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Открытый мир — бесконечный генеративный ландшафт" />
+    <meta property="og:description" content="Один сид — один мир. Океаны, леса, пустыни и горы, день и ночь. Играйте в браузере на компьютере и телефоне." />
+    <meta property="og:image" content="og-cover.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+  </head>
+  <body>
+    <canvas id="scene" aria-label="Игровой мир"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hud" hidden>
+      <div class="hud-bar">
+        <div class="hud-tl">
+          <div class="chip biome-chip"><i id="biome-dot" class="dot"></i><span id="biome-name">—</span></div>
+          <div id="coords" class="coords">X 0 · Y 0 · Z 0</div>
+        </div>
+        <div class="hud-center">
+          <canvas id="compass" class="compass" width="240" height="40" aria-label="Компас"></canvas>
+          <div id="mode-chip" class="mode-chip" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 16l20-8-6 9-4-3-3 6-1-5z" fill="currentColor" /></svg>
+            <span>Полёт</span>
+          </div>
+        </div>
+        <div class="hud-tr">
+          <div class="chip clock-chip">
+            <svg id="clock-icon" viewBox="0 0 24 24" aria-hidden="true"></svg>
+            <span id="clock">08:00</span>
+            <span id="day" class="muted">день 1</span>
+          </div>
+          <button id="btn-pause" class="icon-btn" aria-label="Пауза">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5" fill="currentColor" /><rect x="14" y="5" width="4" height="14" rx="1.5" fill="currentColor" /></svg>
+          </button>
+        </div>
+      </div>
+      <div id="toast" class="toast" aria-live="polite"></div>
+      <div id="hint" class="hint"></div>
+      <button id="lock-hint" class="lock-hint" hidden>Кликните, чтобы управлять мышью</button>
+    </div>
+
+    <!-- Сенсорное управление -->
+    <div id="touch" class="touch" hidden>
+      <div id="touch-surface" class="touch-surface"></div>
+      <div id="stick-home" class="stick-home"></div>
+      <div id="stick" class="stick"><div id="stick-knob" class="stick-knob"></div></div>
+      <div class="touch-buttons">
+        <button id="btn-down" class="tbtn tbtn-small" hidden aria-label="Вниз">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19l-7-8h4V5h6v6h4z" fill="currentColor" /></svg>
+          <span class="tbtn-label">Вниз</span>
+        </button>
+        <button id="btn-fly" class="tbtn tbtn-small" aria-label="Полёт">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 16l20-8-6 9-4-3-3 6-1-5z" fill="currentColor" /></svg>
+          <span class="tbtn-label">Полёт</span>
+        </button>
+        <button id="btn-jump" class="tbtn tbtn-big" aria-label="Прыжок">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l7 8h-4v7H9v-7H5z" fill="currentColor" /></svg>
+          <span class="tbtn-label">Прыжок</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Старт -->
+    <section id="screen-menu" class="screen" aria-labelledby="title">
+      <div class="card menu-card">
+        <h1 id="title" class="title"><span>Открытый</span><span>мир</span></h1>
+        <p class="subtitle">бесконечный генеративный ландшафт</p>
+        <div class="field">
+          <label for="seed-input" class="field-label">Сид мира</label>
+          <div class="seed-row">
+            <input id="seed-input" class="input" maxlength="24" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" />
+            <button id="seed-random" class="icon-btn" aria-label="Случайный сид" title="Случайный сид">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4" fill="none" stroke="currentColor" stroke-width="2" /><circle cx="8.5" cy="8.5" r="1.6" fill="currentColor" /><circle cx="15.5" cy="15.5" r="1.6" fill="currentColor" /><circle cx="15.5" cy="8.5" r="1.6" fill="currentColor" /><circle cx="8.5" cy="15.5" r="1.6" fill="currentColor" /><circle cx="12" cy="12" r="1.6" fill="currentColor" /></svg>
+            </button>
+          </div>
+          <p class="field-note">Один сид — один и тот же мир. Можно ввести число или слово.</p>
+        </div>
+        <button id="btn-play" class="btn btn-primary">Играть</button>
+        <div class="btn-row">
+          <button id="btn-new" class="btn">Новый мир</button>
+          <button id="btn-settings" class="btn">Настройки</button>
+        </div>
+        <p class="controls desktop-only"><kbd>WASD</kbd> идти · <kbd>Shift</kbd> бег · <kbd>Space</kbd> прыжок · <kbd>F</kbd> полёт · <kbd>Esc</kbd> пауза · <kbd>~</kbd> отладка</p>
+        <p class="controls touch-only">Стик слева — идти, до края — бег · свайп справа — осмотреться</p>
+      </div>
+    </section>
+
+    <!-- Загрузка -->
+    <section id="screen-loading" class="screen" aria-live="polite">
+      <div class="card loading-card">
+        <p class="loading-title">Генерация мира…</p>
+        <div class="progress"><i id="loading-bar"></i></div>
+        <p class="muted small">Сид <b id="loading-seed"></b></p>
+      </div>
+    </section>
+
+    <!-- Пауза -->
+    <section id="screen-pause" class="screen" aria-labelledby="pause-title">
+      <div class="card">
+        <h2 id="pause-title" class="screen-title">Пауза</h2>
+        <p class="muted seed-line">Сид <b id="pause-seed"></b> <button id="btn-copy-seed" class="link-btn">копировать</button></p>
+        <button id="btn-resume" class="btn btn-primary">Продолжить</button>
+        <button id="btn-pause-settings" class="btn">Настройки</button>
+        <div class="btn-row">
+          <button id="btn-pause-new" class="btn">Новый мир</button>
+          <button id="btn-menu" class="btn">В меню</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Настройки -->
+    <section id="screen-settings" class="screen" aria-labelledby="settings-title">
+      <div class="card settings-card">
+        <h2 id="settings-title" class="screen-title">Настройки</h2>
+        <div class="settings-list">
+          <div class="setting">
+            <div class="setting-head"><label for="set-view">Дальность прорисовки</label><output id="out-view"></output></div>
+            <input id="set-view" type="range" min="3" max="10" step="1" />
+          </div>
+          <div class="setting">
+            <div class="setting-head"><span id="lbl-quality">Качество</span></div>
+            <div class="segmented" role="radiogroup" aria-labelledby="lbl-quality">
+              <button role="radio" data-quality="low">Низкое</button>
+              <button role="radio" data-quality="medium">Среднее</button>
+              <button role="radio" data-quality="high">Высокое</button>
+            </div>
+          </div>
+          <div class="setting">
+            <div class="setting-head"><label for="set-sens">Чувствительность мыши</label><output id="out-sens"></output></div>
+            <input id="set-sens" type="range" min="0.3" max="3" step="0.1" />
+          </div>
+          <div class="setting">
+            <div class="setting-head"><label for="set-volume">Громкость</label><output id="out-volume"></output></div>
+            <input id="set-volume" type="range" min="0" max="100" step="5" />
+          </div>
+          <div class="setting">
+            <div class="setting-head"><label for="set-ambience">Звуки природы</label><output id="out-ambience"></output></div>
+            <input id="set-ambience" type="range" min="0" max="100" step="5" />
+          </div>
+          <div class="setting">
+            <div class="setting-head"><label for="set-effects">Шаги и всплески</label><output id="out-effects"></output></div>
+            <input id="set-effects" type="range" min="0" max="100" step="5" />
+          </div>
+          <label class="toggle"><span>Уменьшить движение</span><input id="set-motion" type="checkbox" /><i></i></label>
+          <label class="toggle"><span>Инвертировать вертикаль</span><input id="set-invert" type="checkbox" /><i></i></label>
+          <label class="toggle"><span>Показывать FPS и отладку</span><input id="set-debug" type="checkbox" /><i></i></label>
+        </div>
+        <button id="btn-settings-done" class="btn btn-primary">Готово</button>
+      </div>
+    </section>
+
+    <pre id="debug" class="debug" hidden></pre>
+
+    <section id="screen-fatal" class="screen" hidden>
+      <div class="card">
+        <h2 class="screen-title">Не удалось запустить 3D</h2>
+        <p class="muted">Браузер не поддерживает WebGL или он отключён. Попробуйте свежую версию Chrome, Safari или Firefox.</p>
+      </div>
+    </section>
+
+    <noscript><p class="noscript">Для игры нужен JavaScript.</p></noscript>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
