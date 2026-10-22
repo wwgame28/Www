@@ -436,7 +436,7 @@ input[type='range']::-moz-range-thumb {
 }
 .segmented {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   padding: 4px;
   border-radius: var(--radius-sm);
@@ -445,6 +445,9 @@ input[type='range']::-moz-range-thumb {
 }
 .segmented button {
   min-height: 44px;
+  min-width: 0;
+  padding: 0 2px;
+  font-size: 0.86rem;
   border: 0;
   border-radius: 9px;
   background: transparent;

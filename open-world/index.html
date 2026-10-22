@@ -104,9 +104,9 @@
     <!-- Загрузка -->
     <section id="screen-loading" class="screen" aria-live="polite">
       <div class="card loading-card">
-        <p class="loading-title">Генерация мира…</p>
+        <p id="loading-title" class="loading-title">Генерация мира…</p>
         <div class="progress"><i id="loading-bar"></i></div>
-        <p class="muted small">Сид <b id="loading-seed"></b></p>
+        <p id="loading-seed-line" class="muted small">Сид <b id="loading-seed"></b></p>
       </div>
     </section>
 
@@ -140,6 +140,7 @@
                 <button role="radio" data-quality="low">Низкое</button>
                 <button role="radio" data-quality="medium">Среднее</button>
                 <button role="radio" data-quality="high">Высокое</button>
+                <button role="radio" data-quality="ultra">Ультра</button>
               </div>
             </div>
             <div class="setting">

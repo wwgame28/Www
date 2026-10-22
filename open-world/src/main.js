@@ -15,6 +15,8 @@ import { Screens, bindSettings } from './ui/screens.js';
 import { DebugOverlay } from './ui/debug.js';
 import { AudioEngine } from './audio/audio.js';
 import { loadSave, writeSave } from './save.js';
+import { Assets } from './world/assets.js';
+import { Post } from './render/post.js';
 
 const $ = (id) => document.getElementById(id);
 const SEA = CONFIG.world.seaLevel;
@@ -28,7 +30,7 @@ const settings = { ...CONFIG.defaults };
 for (const [k, v] of Object.entries(saved.settings)) {
   if (k in settings && (settings[k] === null || typeof v === typeof settings[k])) settings[k] = v;
 }
-if (!CONFIG.quality[settings.quality]) settings.quality = isTouchDevice ? 'medium' : 'high';
+if (!CONFIG.quality[settings.quality]) settings.quality = isTouchDevice ? 'low' : 'high';
 if (!(settings.viewDistance >= 3 && settings.viewDistance <= 10)) settings.viewDistance = CONFIG.quality[settings.quality].viewDistance;
 if (typeof settings.reduceMotion !== 'boolean') settings.reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -36,9 +38,10 @@ if (typeof settings.reduceMotion !== 'boolean') settings.reduceMotion = matchMed
 const canvas = $('scene');
 let renderer;
 try {
+  // сглаживание — MSAA в буфере постобработки; на «низком» картинку спасает высокая плотность пикселей телефона
   renderer = new THREE.WebGLRenderer({
     canvas,
-    antialias: !isTouchDevice || window.devicePixelRatio < 2,
+    antialias: false,
     powerPreference: 'high-performance',
     stencil: false,
   });
@@ -47,6 +50,9 @@ try {
   throw e;
 }
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.AgXToneMapping;
+// статистика за весь кадр (тени, постобработка), а не за последний вызов render
+renderer.info.autoReset = false;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
@@ -62,6 +68,8 @@ const hud = new Hud();
 const screens = new Screens();
 const debug = new DebugOverlay();
 const audio = new AudioEngine();
+const assets = new Assets(renderer);
+const post = new Post(renderer, scene, camera);
 
 const game = {
   seedText: '',
@@ -80,6 +88,26 @@ function applyPixelRatio() {
   const base = Math.min(window.devicePixelRatio || 1, q.pixelRatio);
   renderer.setPixelRatio(Math.max(0.5, base * pixelScale));
   particles.setViewportHeight(canvas.clientHeight * renderer.getPixelRatio(), camera.fov);
+  post.resize();
+}
+
+// Текстуры и модели под качество: слои земли нужного разрешения, импостеры, набор шейдеров
+const loaded = { tier: '', res: '', busy: null };
+function ensureAssets(q, onProgress) {
+  if (loaded.tier === q.tier && loaded.res === q.textures) return Promise.resolve();
+  const job = (loaded.busy || Promise.resolve())
+    .then(() => assets.loadTerrain(q.textures, onProgress))
+    .then(() => {
+      // пока грузилось, качество могли переключить ещё раз — применяем актуальное
+      const cur = CONFIG.quality[settings.quality];
+      const res = assets.terrain[cur.textures] ? cur.textures : q.textures;
+      world.setAssets(renderer, assets, cur.tier, res);
+      loaded.tier = cur.tier;
+      loaded.res = res;
+      if (res !== cur.textures) return ensureAssets(cur);
+    });
+  loaded.busy = job;
+  return job;
 }
 
 function applyQuality() {
@@ -87,10 +115,12 @@ function applyQuality() {
   if (renderer.shadowMap.enabled !== q.shadows) {
     renderer.shadowMap.enabled = q.shadows;
     scene.traverse((o) => {
-      if (o.material) o.material.needsUpdate = true;
+      if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true;
     });
   }
   world.applySettings(q, settings.viewDistance, camera);
+  post.configure(q);
+  if (assetsReady) ensureAssets(q).catch(reportAssetError);
   pixelScale = 1;
   applyPixelRatio();
   needRender = true;
@@ -118,6 +148,7 @@ function resize() {
   const w = canvas.clientWidth || window.innerWidth;
   const h = canvas.clientHeight || window.innerHeight;
   renderer.setSize(w, h, false);
+  post.resize();
   camera.aspect = w / h;
   baseFov = computeBaseFov(camera.aspect);
   camera.fov = baseFov;
@@ -231,6 +262,23 @@ let firstPlay = true;
 let flyHinted = false;
 
 const states = {
+  // загрузка текстур и сборка моделей деревьев перед первым показом мира
+  boot: {
+    enter() {
+      screens.show('loading');
+      $('loading-title').textContent = 'Загрузка ландшафта…';
+      $('loading-seed-line').hidden = true;
+      $('loading-bar').style.width = '0%';
+      hud.show(false);
+      touch.setVisible(false);
+    },
+    update() {},
+    exit() {
+      $('loading-title').textContent = 'Генерация мира…';
+      $('loading-seed-line').hidden = false;
+    },
+  },
+
   menu: {
     enter() {
       screens.show('menu');
@@ -256,7 +304,7 @@ const states = {
         camera.fov = baseFov;
         camera.updateProjectionMatrix();
       }
-      world.update(dt, camera, f);
+      world.update(dt, camera, f, renderer);
       audio.update(dt, ambienceState(f, false));
     },
   },
@@ -272,7 +320,7 @@ const states = {
     },
     update(dt) {
       player.applyCamera(camera, 1, baseFov, true);
-      world.update(dt, camera, player.pos);
+      world.update(dt, camera, player.pos, renderer);
       const p = world.chunks.readiness(player.pos.x, player.pos.z, CONFIG.streaming.startRadius);
       $('loading-bar').style.width = `${Math.round(p * 100)}%`;
       loadingTime += dt;
@@ -350,7 +398,7 @@ const states = {
 
       world.advanceTime(dt);
       player.applyCamera(camera, acc / STEP, baseFov, settings.reduceMotion);
-      world.update(dt, camera, player.pos);
+      world.update(dt, camera, player.pos, renderer);
       particles.update(dt);
       hud.drawCompass(player.yaw);
       trackBiome(dt);
@@ -687,8 +735,11 @@ function frame(now) {
   let render = needRender;
   if (live) render = true;
   else if (menuLike) render = !isTouchDevice || (menuFrame++ & 1) === 0;
-  if (render) {
-    renderer.render(scene, camera);
+  if (render && stateName !== 'boot') {
+    renderer.info.reset();
+    renderer.toneMappingExposure = world.sky.exposure;
+    post.setExposure(world.sky.exposure);
+    post.render(dt, world.elapsed);
     needRender = false;
   }
   if (debug.visible) {
@@ -698,6 +749,9 @@ function frame(now) {
       memory: renderer.info.memory,
       pixelRatio: renderer.getPixelRatio(),
       instances: world.veg.instances,
+      exposure: world.sky.exposure,
+      tier: CONFIG.quality[settings.quality].tier,
+      clouds: world.sky.cloudCover,
       player,
       seed: game.seedText,
       biome: BIOMES[world.biomeAt(player.pos.x, player.pos.z)]?.name || '',
@@ -707,15 +761,44 @@ function frame(now) {
 }
 
 // ---------- Старт ----------
+let assetsReady = false;
+function reportAssetError(err) {
+  console.error('Не удалось загрузить текстуры:', err);
+  $('loading-title').textContent = 'Не удалось загрузить текстуры. Обновите страницу.';
+}
+
 seedInput.value = saved.seed || randomSeedText();
+setState('boot');
 applySettings();
 resize();
-setWorldSeed(seedInput.value);
-setState('menu');
 requestAnimationFrame(frame);
+(async () => {
+  const q = CONFIG.quality[settings.quality];
+  let common = 0;
+  let terrain = 0;
+  const show = () => ($('loading-bar').style.width = `${Math.round((common * 0.35 + terrain * 0.55) * 100)}%`);
+  await Promise.all([
+    assets.loadCommon((p) => {
+      common = p;
+      show();
+    }),
+    assets.loadTerrain(q.textures, (p) => {
+      terrain = p;
+      show();
+    }),
+  ]);
+  // сборка деревьев и импостеров занимает долю секунды — даём полосе дорисоваться
+  await new Promise((r) => setTimeout(r, 30));
+  await ensureAssets(q);
+  $('loading-bar').style.width = '100%';
+  assetsReady = true;
+  setWorldSeed(seedInput.value);
+  setState('menu');
+})().catch(reportAssetError);
 
 // Ручка для автотестов и отладки из консоли
 window.__game = {
+  THREE,
   get state() {
     return stateName;
   },
@@ -725,5 +808,7 @@ window.__game = {
   camera,
   renderer,
   audio,
+  post,
+  assets,
   persist,
 };

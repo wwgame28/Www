@@ -27,7 +27,8 @@ test('буферы чанка совпадают побайтно для одн�
     const r2 = buildTerrainChunk(createTerrain(777), 3, -5, lod, 1);
     assert.deepEqual(r1.positions, r2.positions);
     assert.deepEqual(r1.normals, r2.normals);
-    assert.deepEqual(r1.colors, r2.colors);
+    assert.deepEqual(r1.splat, r2.splat);
+    assert.deepEqual(r1.tint, r2.tint);
     if (lod === 0) assert.deepEqual(r1.grass.matrices, r2.grass.matrices);
   }
   const v1 = buildVegetationChunk(createTerrain(777), -2, 4, 1);
@@ -48,7 +49,7 @@ test('соседние чанки одного LOD сходятся без ще�
       const vb = j * E * 3;
       assert.equal(a.positions[va + 1], b.positions[vb + 1]);
       for (let k = 0; k < 3; k++) assert.equal(a.normals[va + k], b.normals[vb + k]);
-      for (let k = 0; k < 3; k++) assert.equal(a.colors[va + k], b.colors[vb + k]);
+      for (let k = 0; k < 8; k++) assert.equal(a.splat[(va / 3) * 8 + k], b.splat[(vb / 3) * 8 + k]);
     }
     for (let i = 0; i <= N; i++) {
       assert.equal(a.positions[(N * E + i) * 3 + 1], c.positions[i * 3 + 1]);

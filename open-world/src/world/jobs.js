@@ -6,8 +6,8 @@ export function runJob(terrain, m) {
   const t0 = performance.now();
   if (m.type === 'terrain') {
     const r = buildTerrainChunk(terrain, m.cx, m.cz, m.lod, m.grass);
-    const transfer = [r.positions.buffer, r.normals.buffer, r.colors.buffer];
-    if (r.grass) transfer.push(r.grass.matrices.buffer, r.grass.colors.buffer);
+    const transfer = [r.positions.buffer, r.normals.buffer, r.splat.buffer, r.tint.buffer];
+    if (r.grass) transfer.push(r.grass.matrices.buffer, r.grass.colors.buffer, r.grass.variants.buffer);
     return { msg: { type: 'terrain', id: m.id, gen: m.gen, cx: m.cx, cz: m.cz, lod: m.lod, ms: performance.now() - t0, ...r }, transfer };
   }
   const r = buildVegetationChunk(terrain, m.cx, m.cz, m.density);

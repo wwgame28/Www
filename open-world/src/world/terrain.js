@@ -1,7 +1,7 @@
-// Высота, влажность, биом и цвет земли в любой точке мира.
+// Высота, влажность, биом и слои земли в любой точке мира.
 // Чистые функции без three.js: одинаково работают в воркере, в основном потоке и в тестах.
 import { CONFIG } from '../config.js';
-import { createNoise2D, fbm, ridged, mixSeed, smoothstep, clamp01, lerp } from './noise.js';
+import { createNoise2D, fbm, ridged, mixSeed, smoothstep, clamp01 } from './noise.js';
 
 export const BIOME = { OCEAN: 0, LAKE: 1, BEACH: 2, PLAINS: 3, FOREST: 4, DESERT: 5, MOUNTAINS: 6, SNOW: 7 };
 
@@ -25,8 +25,11 @@ export function hexToLinear(hex) {
   return [srgbToLinear(((n >> 16) & 255) / 255), srgbToLinear(((n >> 8) & 255) / 255), srgbToLinear((n & 255) / 255)];
 }
 
-const PAL = {};
-for (const [k, hex] of Object.entries(CONFIG.colors)) PAL[k] = hexToLinear(hex);
+// Слои текстуры земли (порядок как в src/assets/terrain/layers.json)
+export const LAYERS = ['grass', 'forest', 'sand', 'desert', 'rocky', 'cliff', 'snow', 'dry'];
+export const LAYER_COUNT = LAYERS.length;
+export const LAYER = { GRASS: 0, FOREST: 1, SAND: 2, DESERT: 3, ROCKY: 4, CLIFF: 5, SNOW: 6, DRY: 7 };
+const SEA_L = CONFIG.world.seaLevel;
 
 export function createTerrain(seed) {
   const T = CONFIG.terrain;
@@ -142,72 +145,123 @@ export function createTerrain(seed) {
     return classify(s.h, f.c, f.moist, s.ny, f.jitter);
   }
 
-  // Цвет земли (линейный RGB) с мягкими переходами между биомами
-  function color(x, z, h, c, moist, ny, jitter, out, o) {
+  // Слои земли для шейдера: 8 весов (байты, сумма 255) в W[wo..wo+7] и оттенок (×127,5) в Tn[to..to+3].
+  // Порядок слоёв — как в текстуре: трава, лесная подстилка, песок, сухая земля, щебень, скала, снег, сухая трава.
+  const lw = new Float64Array(LAYER_COUNT);
+  function layers(x, z, h, c, moist, ny, jitter, W, wo, Tn, to) {
+    lw.fill(0);
     const b = T.moistureBlend;
     const wDesert = smoothstep(T.desertMoisture + b, T.desertMoisture - b, moist);
     const wForest = smoothstep(T.forestMoisture - b, T.forestMoisture + b, moist);
-    let r = lerp(PAL.plains[0], PAL.desert[0], wDesert);
-    let g = lerp(PAL.plains[1], PAL.desert[1], wDesert);
-    let bl = lerp(PAL.plains[2], PAL.desert[2], wDesert);
-    r = lerp(r, PAL.forest[0], wForest);
-    g = lerp(g, PAL.forest[1], wForest);
-    bl = lerp(bl, PAL.forest[2], wForest);
-
+    const v1 = nVar(x * 0.021, z * 0.021);
+    const v2 = nVar(x * 0.11 + 31.7, z * 0.11 - 17.3);
+    let grass = (1 - wDesert) * (1 - wForest);
+    let forest = (1 - wDesert) * wForest;
+    let dry = 0;
+    let rocky = 0;
+    // полоса выгоревшей травы на границе со степью и пятна сухой травы на лугах
+    const dryBand = smoothstep(T.desertMoisture + 0.15 + 0.04 * v1, T.desertMoisture + 0.02, moist) * (1 - wDesert);
+    dry = grass * Math.max(dryBand, smoothstep(0.35, 0.7, v1) * 0.45);
+    grass -= dry;
+    // в лесу — поляны с травой
+    const glade = forest * smoothstep(0.15, 0.55, v1 * 0.55 + v2 * 0.45) * 0.7;
+    forest -= glade;
+    grass += glade;
+    // к границе скал луга становятся альпийскими: трава редеет, проступает щебень
     const rockLine = T.rockLine + jitter * T.rockJitter;
-    const alpine = smoothstep(rockLine - 34, rockLine - 10, h) * (1 - wDesert) * 0.75;
-    r = lerp(r, PAL.alpine[0], alpine);
-    g = lerp(g, PAL.alpine[1], alpine);
-    bl = lerp(bl, PAL.alpine[2], alpine);
-
-    const wRock = Math.max(smoothstep(rockLine - 6, rockLine + 6, h), smoothstep(T.steepRock + 0.1, T.steepRock - 0.08, ny));
-    if (wRock > 0) {
-      const rr = lerp(PAL.rock[0], PAL.desertRock[0], wDesert);
-      const rg = lerp(PAL.rock[1], PAL.desertRock[1], wDesert);
-      const rb = lerp(PAL.rock[2], PAL.desertRock[2], wDesert);
-      r = lerp(r, rr, wRock);
-      g = lerp(g, rg, wRock);
-      bl = lerp(bl, rb, wRock);
+    const alpine = smoothstep(rockLine - 34, rockLine - 8, h) * (1 - wDesert);
+    if (alpine > 0) {
+      const veg = grass + forest + dry;
+      grass = (grass + forest) * (1 - alpine) + veg * alpine * 0.5;
+      forest = 0;
+      dry = dry * (1 - alpine) + veg * alpine * 0.22;
+      rocky += veg * alpine * 0.28;
     }
-
+    // на крутых склонах трава не держится — щебень и земля
+    const erosion = smoothstep(0.94, 0.8, ny) * 0.65;
+    if (erosion > 0) {
+      const moved = (grass + dry) * erosion;
+      grass *= 1 - erosion;
+      dry *= 1 - erosion;
+      rocky += moved * 0.6;
+      forest += moved * 0.4;
+    }
+    lw[0] = grass;
+    lw[1] = forest;
+    lw[3] = wDesert;
+    lw[4] = rocky;
+    lw[7] = dry;
+    // выше линии скал — щебень, на обрывах — скала
+    const wRockH = smoothstep(rockLine - 6, rockLine + 6, h);
+    const wSteep = smoothstep(T.steepRock + 0.14, T.steepRock - 0.04, ny) * smoothstep(SEA_L + 0.2, SEA_L + 1.5, h);
+    const keep = (1 - wRockH) * (1 - wSteep);
+    if (keep < 1) {
+      for (let i = 0; i < LAYER_COUNT; i++) lw[i] *= keep;
+      lw[4] += wRockH * (1 - wSteep);
+      lw[5] += wSteep;
+    }
+    // снег на пологих местах выше снеговой линии
     const snowLine = T.snowLine + jitter * T.snowJitter;
-    const wSnow = smoothstep(snowLine - 4, snowLine + 4, h) * smoothstep(0.42, 0.68, ny);
+    const wSnow = smoothstep(snowLine - 4, snowLine + 4, h) * smoothstep(0.55, 0.75, ny);
     if (wSnow > 0) {
-      r = lerp(r, PAL.snow[0], wSnow);
-      g = lerp(g, PAL.snow[1], wSnow);
-      bl = lerp(bl, PAL.snow[2], wSnow);
+      for (let i = 0; i < LAYER_COUNT; i++) lw[i] *= 1 - wSnow;
+      lw[6] += wSnow;
     }
-
-    const beachTop = T.beachTop + jitter * T.beachJitter;
+    // пляж у моря, у озёр — илистый берег с галькой
     const coastal = 1 - smoothstep(T.beachMaxContinent - 0.08, T.beachMaxContinent, c);
+    const beachTop = T.beachTop + jitter * T.beachJitter;
     const wBeach = (1 - smoothstep(beachTop - 0.4, beachTop + 0.6, h)) * coastal;
-    if (wBeach > 0) {
-      r = lerp(r, PAL.beach[0], wBeach);
-      g = lerp(g, PAL.beach[1], wBeach);
-      bl = lerp(bl, PAL.beach[2], wBeach);
+    const wBank = (1 - smoothstep(SEA_L + 0.1, SEA_L + 1.1, h)) * (1 - coastal);
+    const shore = Math.max(wBeach, wBank);
+    if (shore > 0) {
+      for (let i = 0; i < LAYER_COUNT; i++) lw[i] *= 1 - shore;
+      lw[2] += wBeach;
+      lw[1] += wBank * 0.55;
+      lw[4] += wBank * 0.45;
     }
-
-    const wWet = (1 - smoothstep(0, 0.7, Math.abs(h - sea - 0.15))) * 0.6;
-    if (wWet > 0) {
-      r = lerp(r, PAL.wetSand[0], wWet);
-      g = lerp(g, PAL.wetSand[1], wWet);
-      bl = lerp(bl, PAL.wetSand[2], wWet);
+    // дно: у берега песок, глубже — ил и камни
+    if (h < SEA_L) {
+      const k = smoothstep(0, 0.6, SEA_L - h);
+      const sandy = (1 - smoothstep(1.5, 10, SEA_L - h)) * (0.5 + 0.5 * coastal);
+      for (let i = 0; i < LAYER_COUNT; i++) lw[i] *= 1 - k;
+      lw[2] += k * sandy;
+      lw[4] += k * (1 - sandy) * 0.55;
+      lw[1] += k * (1 - sandy) * 0.45;
     }
-
-    if (h < sea) {
-      const depth = sea - h;
-      const deep = smoothstep(0, 18, depth);
-      const k = smoothstep(0, 1.2, depth);
-      r = lerp(r, lerp(PAL.seabedShallow[0], PAL.seabedDeep[0], deep), k);
-      g = lerp(g, lerp(PAL.seabedShallow[1], PAL.seabedDeep[1], deep), k);
-      bl = lerp(bl, lerp(PAL.seabedShallow[2], PAL.seabedDeep[2], deep), k);
+    let sum = 0;
+    for (let i = 0; i < LAYER_COUNT; i++) sum += lw[i];
+    // байты с суммой ровно 255: остаток округления — самому весомому слою
+    let total = 0;
+    let top = 0;
+    for (let i = 0; i < LAYER_COUNT; i++) {
+      const q = Math.round((lw[i] / sum) * 255);
+      W[wo + i] = q;
+      total += q;
+      if (lw[i] > lw[top]) top = i;
     }
+    W[wo + top] = Math.max(0, Math.min(255, W[wo + top] + 255 - total));
 
-    const v = 1 + 0.07 * nVar(x * 0.09, z * 0.09) + 0.035 * nVar(x * 0.45 + 100, z * 0.45 - 100);
-    out[o] = r * v;
-    out[o + 1] = g * v;
-    out[o + 2] = bl * v;
+    // оттенок: лес темнее, песчаник в пустыне красноватый, лёгкая пятнистость
+    let r = 1;
+    let g = 1;
+    let bl = 1;
+    const fw = lw[1] / sum + (wForest * lw[0]) / sum;
+    r -= 0.08 * fw;
+    g -= 0.03 * fw;
+    bl -= 0.07 * fw;
+    const desertRock = ((lw[4] + lw[5]) / sum) * wDesert;
+    r += 0.22 * desertRock;
+    g -= 0.06 * desertRock;
+    bl -= 0.26 * desertRock;
+    const grassy = (lw[0] + lw[7]) / sum;
+    r *= 1 + 0.05 * v1 * grassy;
+    bl *= 1 - 0.06 * v1 * grassy;
+    const v = 1 + 0.06 * nVar(x * 0.09, z * 0.09) + 0.03 * nVar(x * 0.45 + 100, z * 0.45 - 100);
+    Tn[to] = Math.min(255, Math.round(r * v * 127.5));
+    Tn[to + 1] = Math.min(255, Math.round(g * v * 127.5));
+    Tn[to + 2] = Math.min(255, Math.round(bl * v * 127.5));
+    Tn[to + 3] = 255;
   }
 
-  return { seed, fields, height, surface, classify, biomeAt, color };
+  return { seed, fields, height, surface, classify, biomeAt, layers };
 }

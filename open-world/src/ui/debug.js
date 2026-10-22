@@ -1,4 +1,4 @@
-// Отладочный оверлей (клавиша ~): FPS, время кадра, чанки, draw calls, треугольники.
+// Отладочный оверлей (клавиша ~): FPS, время кадра, чанки, draw calls, треугольники, экспозиция.
 import { CONFIG } from '../config.js';
 
 export class DebugOverlay {
@@ -46,6 +46,7 @@ export class DebugOverlay {
       `draw calls ${r.calls}  треугольников ${(r.triangles / 1000).toFixed(0)}k  разрешение ×${info.pixelRatio.toFixed(2)}`,
       `чанки ${c.meshes}/${c.loaded}  LOD ${c.lods.join('/')}  очередь ${c.queued}  в работе ${c.inFlight}  воркеров ${c.workers}${c.inline ? ' + основной поток' : ''}`,
       `генерация ${c.genMs.toFixed(1)} мс/чанк  трава ${c.grass}  растения ${info.instances}`,
+      `качество ${info.tier}  экспозиция ${info.exposure.toFixed(2)}  облачность ${(info.clouds * 100).toFixed(0)}%`,
       `геометрий ${info.memory.geometries}  текстур ${info.memory.textures}`,
       `x ${p.pos.x.toFixed(1)} y ${p.pos.y.toFixed(1)} z ${p.pos.z.toFixed(1)}  ${p.flying ? 'полёт' : p.swimming ? 'плывёт' : p.grounded ? 'на земле' : 'в воздухе'}`,
       `сид ${info.seed}  ${info.biome}`,

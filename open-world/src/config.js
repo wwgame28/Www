@@ -1,7 +1,7 @@
 // «Открытый мир» — все числа баланса и настройки генерации в одном месте.
 //
-// Арт-направление: стилизованный low-poly с мягким пастельным светом.
-// Настроение: спокойное исследование без цели и спешки.
+// Арт-направление: фотореализм — физическое небо и свет, PBR-материалы с фототекстурами,
+// воздушная перспектива, тени, живая растительность. Настроение: спокойное исследование без цели.
 // Ключевые слова: простор, свет, тишина.
 
 export const CONFIG = {
@@ -54,21 +54,6 @@ export const CONFIG = {
     skirtDepth: 5, // м, «юбка» чанка, прячет щели между LOD
   },
 
-  // Цвета мира (sRGB). Перевод в линейное пространство — в генераторе.
-  colors: {
-    seabedShallow: '#d6c48f',
-    seabedDeep: '#24505e',
-    beach: '#eedb9f',
-    wetSand: '#c9b17a',
-    plains: '#8dc05a',
-    forest: '#4c8a3c',
-    desert: '#e6c587',
-    desertRock: '#c98a5a',
-    rock: '#8a847b',
-    alpine: '#7f9c58',
-    snow: '#f2f6fb',
-  },
-
   // Уровни детализации. distances — граница (м, до ближайшей точки чанка) каждого уровня.
   lod: {
     segments: [64, 32, 16, 8, 4],
@@ -80,107 +65,232 @@ export const CONFIG = {
   veg: {
     cell: 4,
     rules: {
-      plains: [['oak', 0.03], ['birch', 0.012], ['bush', 0.05], ['rock', 0.012]],
-      forest: [['pine', 0.2], ['oak', 0.075], ['birch', 0.06], ['bush', 0.06], ['rock', 0.015]],
-      desert: [['cactus', 0.05], ['deadBush', 0.07], ['rock', 0.025]],
+      plains: [['oak', 0.028], ['birch', 0.014], ['bush', 0.05], ['rock', 0.012]],
+      forest: [['pine', 0.19], ['oak', 0.07], ['birch', 0.06], ['bush', 0.07], ['rock', 0.015]],
+      desert: [['cactus', 0.045], ['deadBush', 0.07], ['rock', 0.025]],
       beach: [['palm', 0.05], ['rock', 0.012]],
-      mountains: [['pine', 0.04], ['rock', 0.09]],
+      mountains: [['pine', 0.04], ['bush', 0.03], ['rock', 0.09]],
       snow: [['snowPine', 0.045], ['rock', 0.05]],
     },
-    flowerCell: 2.5,
-    flowerP: { plains: 0.11, forest: 0.02, mountains: 0.03 },
     maxTreeSlope: 0.78, // нормаль.y деревьев не ниже
-    grassCell: 1.15,
-    grassP: { plains: 0.9, forest: 0.5, mountains: 0.35, beach: 0.04, desert: 0.03 },
-    maxGrassSlope: 0.8,
-    // какие типы видны далеко (у деревьев есть упрощённая дальняя модель)
-    farTypes: ['pine', 'snowPine', 'oak', 'birch', 'palm', 'rock'],
+    // трава: клетка (м), насыщенность и доля цветочных полян по биомам
+    grassCell: 0.85,
+    grassFill: 0.95,
+    maxGrassSlope: 0.78,
+    flowerP: { plains: 0.3, forest: 0.08, mountains: 0.35 },
     // [мин, макс] масштаба и насколько основание уходит в землю (м)
     scale: {
-      pine: [0.8, 1.35, 0.2],
-      snowPine: [0.75, 1.25, 0.2],
-      oak: [0.8, 1.3, 0.2],
-      birch: [0.85, 1.25, 0.2],
+      pine: [0.8, 1.3, 0.2],
+      snowPine: [0.75, 1.2, 0.2],
+      oak: [0.8, 1.25, 0.2],
+      birch: [0.85, 1.2, 0.2],
       palm: [0.85, 1.2, 0.2],
       cactus: [0.7, 1.3, 0.15],
-      bush: [0.6, 1.2, 0.15],
+      bush: [0.7, 1.25, 0.12],
       deadBush: [0.6, 1.1, 0.1],
       rock: [0.45, 2.2, 0.3],
-      flower: [0.75, 1.25, 0.05],
     },
-    autumnChance: 0.12,
+    // сколько разных форм у вида (генерируются при загрузке) и препятствие ствола: [радиус, высота] на масштаб 1
+    forms: { pine: 3, snowPine: 2, oak: 3, birch: 2, palm: 2, bush: 3, deadBush: 2, cactus: 2 },
+    trunk: { pine: [0.3, 9], snowPine: [0.3, 9], oak: [0.38, 9], birch: [0.22, 9], palm: [0.26, 7], cactus: [0.42, 3] },
+    rockVariants: 3,
+    autumnChance: 0.14,
   },
 
-  // Цвета растительности (sRGB). У деревьев цвет кроны — на экземпляр, ствол свой.
-  vegColors: {
-    grass: { plains: '#a3d465', forest: '#64a048', mountains: '#8fab5e', beach: '#d4c982', desert: '#cdb66d' },
-    pine: ['#2f6e3c', '#346f3a', '#2a6237', '#3b7a42'],
-    snowPine: ['#2f6a40', '#35704a'],
-    oak: ['#4f9a3f', '#5aa84a', '#468e3a', '#62a64e'],
-    oakAutumn: ['#e0902c', '#cf5a2a', '#e6b43c'],
-    birch: ['#a2cd5c', '#aed468', '#93c254'],
-    palm: ['#4f9a3a', '#5ba646'],
-    cactus: ['#4f8f4a', '#5a9a50'],
-    bush: ['#4f8f3e', '#5b9a46', '#447f37'],
-    deadBush: ['#8a6a45', '#7a5c3c'],
-    rock: {
-      mountains: '#8a847b',
-      desert: '#c98a5a',
-      beach: '#b9ab8f',
-      snow: '#a9b0b8',
-      plains: '#8d8a80',
-      forest: '#7f7d74',
+  // Модели деревьев: пресеты ez-tree, высота вида (м), формы — разные сиды.
+  // near/mid — прореживание колец, сегментов, мелких веток и листьев для ближней и средней модели.
+  trees: {
+    near: { sectionStep: 2, segmentDiv: 1.6, leafKeep: 2, leafScale: 1.4 },
+    mid: { sectionStep: 3, segmentDiv: 2.5, maxLevel: 1, leafKeep: 6, leafScale: 2.4, billboard: 'single' },
+    impostor: { frames: 8, size: { low: 96, medium: 128, high: 192, ultra: 256 } },
+    species: {
+      pine: { preset: 'pine_medium', height: 18, bark: 'Pine', leaves: 'Pine', seeds: [101, 202, 303], near: { leafKeep: 3, leafScale: 1.6 }, mid: { maxLevel: 0 } },
+      snowPine: { preset: 'pine_small', height: 12, bark: 'Pine', leaves: 'Pine', snowy: true, seeds: [17, 29], near: { leafKeep: 3, leafScale: 1.6 }, mid: { maxLevel: 0 } },
+      oak: { preset: 'oak_medium', height: 13, bark: 'Oak', leaves: 'Oak', seeds: [7, 19, 31] },
+      birch: { preset: 'aspen_medium', height: 16, bark: 'Birch', leaves: 'Aspen', recolor: [0.27, 0.4, 0.13], seeds: [5, 23] },
+      bush: { preset: 'bush_2', height: 1.7, bark: 'Oak', leaves: 'Oak', seeds: [3, 9, 27], small: true },
+      deadBush: { preset: 'bush_2', height: 1.1, bark: 'Oak', leaves: null, barkTint: '#a09890', seeds: [4, 8], small: true },
     },
-    flowers: ['#ffffff', '#ffd84a', '#b57cff', '#ff8fb3', '#ff6b4a', '#7fb2ff'],
+    palm: { height: 7.5, lean: 0.9, rings: 12, fronds: 13, frondLength: 3.8, frondWidth: 1.25, frondSegments: 7 },
+    cactus: { height: 3.2, radius: 0.33, ribs: 12 },
+    rock: { detailNear: 4, detailFar: 1, roughness: 0.32 },
+  },
+
+  // Оттенки растительности (sRGB, множитель к текстуре: белый — без изменений).
+  // У осенних дубов листва перекрашивается по яркости в эти цвета.
+  vegColors: {
+    pine: ['#ffffff', '#f2f7ee', '#e9f0e6', '#f7fbf0'],
+    snowPine: ['#ffffff', '#eef4ee'],
+    oak: ['#ffffff', '#f4f8e8', '#ecf3e2', '#fbfbea'],
+    oakAutumn: ['#e8902c', '#d0582a', '#e6b43c', '#c8742a'],
+    birch: ['#ffffff', '#f8f8e4', '#f0f6dc'],
+    palm: ['#ffffff', '#f2f6e6'],
+    cactus: ['#ffffff', '#eef6ee'],
+    bush: ['#ffffff', '#eef4e4', '#e4ecda'],
+    deadBush: ['#ffffff', '#ece4dc'],
+    rock: {
+      mountains: '#ffffff',
+      desert: '#e8b48c',
+      beach: '#f2ead8',
+      snow: '#eef2f6',
+      plains: '#f4f2ec',
+      forest: '#e4e8dc',
+    },
   },
 
   // Качество графики. Дальность — в чанках, расстояния растительности — в метрах.
+  // tier — какой набор шейдеров и текстур брать: low — телефоны, ultra — мощные видеокарты.
   quality: {
     low: {
+      tier: 'low',
+      textures: 'lo',
       pixelRatio: 1,
       viewDistance: 4,
       lodScale: 0.75,
       vegDensity: 0.55,
-      grassDensity: 0.4,
-      treeNear: 70,
+      grassDensity: 0.45,
+      grassFar: 26,
+      treeNear: 32,
+      treeMid: 90,
       treeFar: 210,
-      smallFar: 60,
+      smallFar: 55,
       shadows: false,
-      clouds: 10,
+      shadowSize: 0,
+      shadowRange: 0,
+      post: false,
+      msaa: 0,
+      bloom: false,
     },
     medium: {
+      tier: 'medium',
+      textures: 'lo',
       pixelRatio: 1.5,
       viewDistance: 6,
       lodScale: 1,
       vegDensity: 0.8,
       grassDensity: 0.7,
-      treeNear: 100,
+      grassFar: 36,
+      treeNear: 48,
+      treeMid: 130,
       treeFar: 320,
-      smallFar: 90,
-      shadows: false,
-      clouds: 18,
+      smallFar: 85,
+      shadows: true,
+      shadowSize: 1024,
+      shadowRange: 42,
+      post: true,
+      msaa: 2,
+      bloom: false,
     },
     high: {
+      tier: 'high',
+      textures: 'hi',
       pixelRatio: 2,
       viewDistance: 8,
       lodScale: 1.25,
       vegDensity: 1,
       grassDensity: 1,
-      treeNear: 140,
+      grassFar: 48,
+      treeNear: 70,
+      treeMid: 170,
       treeFar: 460,
-      smallFar: 130,
+      smallFar: 120,
       shadows: true,
-      clouds: 26,
+      shadowSize: 2048,
+      shadowRange: 60,
+      post: true,
+      msaa: 4,
+      bloom: true,
+    },
+    ultra: {
+      tier: 'ultra',
+      textures: 'hi',
+      pixelRatio: 2,
+      viewDistance: 10,
+      lodScale: 1.5,
+      vegDensity: 1,
+      grassDensity: 1,
+      grassFar: 62,
+      treeNear: 95,
+      treeMid: 220,
+      treeFar: 600,
+      smallFar: 150,
+      shadows: true,
+      shadowSize: 4096,
+      shadowRange: 85,
+      post: true,
+      msaa: 4,
+      bloom: true,
     },
   },
 
   render: {
-    fogNearFactor: 0.3, // туман начинается с доли дальности
-    fogFarFactor: 0.94,
+    fogNearFactor: 0.62, // у края дальности земля растворяется в небе: с этой доли дальности
+    fogFarFactor: 0.97,
     adaptive: { minScale: 0.6, lowFps: 50, highFps: 58, window: 1.5 },
-    shadowSize: 2048,
-    shadowRange: 55,
     mobileMaxFps: 60,
+    toneMapping: 'agx',
+    bloom: { strength: 0.1, radius: 0.4, threshold: 3.2 }, // порог — во сколько раз ярче белого на экране
+    vignette: 0.22,
+    grain: 0.018,
+    saturation: 1.06,
+    contrast: 1.04,
+  },
+
+  // Атмосфера и небо: физические константы рассеяния (Земля) и художественные настройки
+  atmosphere: {
+    planetRadius: 6360000,
+    atmosphereHeight: 100000,
+    rayleigh: [5.802e-6, 13.558e-6, 33.1e-6], // 1/м
+    ozone: [0.65e-6, 1.881e-6, 0.085e-6],
+    mieScatter: 3.996e-6,
+    mieExtinction: 4.4e-6,
+    rayleighHeight: 8000,
+    mieHeight: 1200,
+    mieG: 0.8,
+    multiScatter: 0.6,
+    groundAlbedo: 0.12,
+    viewerAltitude: 250,
+    sunIlluminance: 6, // условные единицы: белая поверхность под полуденным солнцем ≈ 1,9
+    moonIlluminance: 0.16,
+    moonTint: [0.55, 0.7, 1.0],
+    sunTilt: 0.5, // наклон пути солнца к югу, рад
+    sunDisk: { radius: 0.0055, radiance: 22 },
+    moonDisk: { radius: 0.0062, brightness: 1.6 },
+    stars: 0.9,
+    milkyWay: 0.05,
+    lut: {
+      low: { width: 128, height: 64, viewSteps: 12, lightSteps: 5 },
+      medium: { width: 192, height: 96, viewSteps: 18, lightSteps: 6 },
+      high: { width: 256, height: 128, viewSteps: 24, lightSteps: 8 },
+      ultra: { width: 256, height: 128, viewSteps: 28, lightSteps: 8 },
+    },
+    lutHz: 10,
+    envHz: 2,
+    envSize: [128, 64],
+    // экспозиция: средняя яркость сцены (альбедо × освещённость / π) приводится к key
+    exposure: { key: 0.2, albedo: 0.2, min: 0.12, max: 5, adapt: 1.2, airglow: 0.004 },
+    fog: { density: 0.0007, falloff: 1 / 320, baseHeight: 0, sunGlow: 1, sunGlowScale: 0.012 },
+    clouds: {
+      altitude: 1700,
+      scale: 12000, // м на плитку шума
+      speed: 7, // м/с
+      density: 1,
+      shadow: 0.62,
+      coverage: [0.08, 0.7],
+      period: 3.3, // игровых суток на цикл погоды
+      lightStep: 170,
+      hazeDistance: 42000,
+    },
+  },
+
+  // Вода: поглощение и рассеяние толщи (1/м), пена у берега, карта высот дна вокруг игрока
+  water: {
+    absorption: [0.42, 0.075, 0.055],
+    scatter: [0.012, 0.03, 0.034],
+    foamDepth: 0.55,
+    normalScale: [6.5, 19],
+    normalStrength: 0.55,
+    heightfield: { size: 512, cell: 2, uploadHz: 4, unknownDepth: -40 },
   },
 
   streaming: {

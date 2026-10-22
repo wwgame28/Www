@@ -1,6 +1,7 @@
 // Частицы из пула: пыль при приземлении, всплески воды, облачка песка и снега под ногами.
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
+import { atmo } from './atmosphere.js';
 
 const vertex = /* glsl */ `
 attribute float aSize;
@@ -18,6 +19,8 @@ void main() {
 }`;
 
 const fragment = /* glsl */ `
+uniform vec3 uLightDir;
+uniform vec3 uLightColor;
 varying float vAlpha;
 varying vec3 vColor;
 #include <fog_pars_fragment>
@@ -25,9 +28,11 @@ void main() {
   float d = length(gl_PointCoord - 0.5);
   float a = smoothstep(0.5, 0.15, d) * vAlpha;
   if (a < 0.01) discard;
-  gl_FragColor = vec4(vColor, a);
+  // пылинки освещены как матовая поверхность: солнце сверху-сбоку плюс доля рассеянного света
+  vec3 light = uLightColor * (max(uLightDir.y, 0.0) * 0.8 + 0.2) / 3.14159;
+  gl_FragColor = vec4(vColor * light * 1.6, a);
+  #include <tonemapping_fragment>
   #include <colorspace_fragment>
-  #include <fog_fragment>
 }`;
 
 export class Particles {
@@ -48,6 +53,7 @@ export class Particles {
     geo.setAttribute('aAlpha', attr(this.alpha, 1));
     geo.setDrawRange(0, 0);
     this.uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uScale: { value: 400 } }]);
+    Object.assign(this.uniforms, atmo);
     const mat = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
       vertexShader: vertex.replace('void main() {', '#include <fog_pars_vertex>\nvoid main() {'),

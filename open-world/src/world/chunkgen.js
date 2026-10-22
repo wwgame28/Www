@@ -1,8 +1,8 @@
-// Генерация данных чанка: сетка рельефа с LOD, трава, деревья, камни, цветы, препятствия.
+// Генерация данных чанка: сетка рельефа с LOD и весами слоёв, трава, деревья, камни, препятствия.
 // Запускается в Web Worker; без three.js, поэтому проверяется и в Node-тестах.
 import { CONFIG } from '../config.js';
 import { hash2i, mixSeed } from './noise.js';
-import { BIOMES, hexToLinear } from './terrain.js';
+import { BIOMES, LAYER, LAYER_COUNT, hexToLinear } from './terrain.js';
 
 const S = CONFIG.world.chunkSize;
 const SEA = CONFIG.world.seaLevel;
@@ -95,13 +95,15 @@ export function buildTerrainChunk(terrain, cx, cz, lod, grassDensity = 0) {
   const total = V + 4 * E;
   const positions = new Float32Array(total * 3);
   const normals = new Float32Array(total * 3);
-  const colors = new Float32Array(total * 3);
+  const splat = new Uint8Array(total * LAYER_COUNT);
+  const tint = new Uint8Array(total * 4);
   let minY = Infinity;
   let maxY = -Infinity;
   for (let j = 0; j <= N; j++) {
     for (let i = 0; i <= N; i++) {
       const g = (j + 1) * G + (i + 1);
-      const o = (j * E + i) * 3;
+      const v = j * E + i;
+      const o = v * 3;
       const h = H[g];
       positions[o] = i * step;
       positions[o + 1] = h;
@@ -109,32 +111,30 @@ export function buildTerrainChunk(terrain, cx, cz, lod, grassDensity = 0) {
       normals[o] = NX[g];
       normals[o + 1] = NY[g];
       normals[o + 2] = NZ[g];
-      terrain.color(ox + i * step, oz + j * step, h, C[g], M[g], NY[g], J[g], colors, o);
+      terrain.layers(ox + i * step, oz + j * step, h, C[g], M[g], NY[g], J[g], splat, v * LAYER_COUNT, tint, v * 4);
       if (h < minY) minY = h;
       if (h > maxY) maxY = h;
     }
   }
   // «Юбки»: копия краёв, опущенная вниз, закрывает щели между соседями разных LOD
   const depth = CONFIG.terrain.skirtDepth + step * 0.5;
-  let k = V * 3;
+  let k = V;
   const skirt = (v) => {
-    const o = v * 3;
-    positions[k] = positions[o];
-    positions[k + 1] = positions[o + 1] - depth;
-    positions[k + 2] = positions[o + 2];
-    for (let c = 0; c < 3; c++) {
-      normals[k + c] = normals[o + c];
-      colors[k + c] = colors[o + c];
-    }
-    k += 3;
+    positions[k * 3] = positions[v * 3];
+    positions[k * 3 + 1] = positions[v * 3 + 1] - depth;
+    positions[k * 3 + 2] = positions[v * 3 + 2];
+    for (let c = 0; c < 3; c++) normals[k * 3 + c] = normals[v * 3 + c];
+    for (let c = 0; c < LAYER_COUNT; c++) splat[k * LAYER_COUNT + c] = splat[v * LAYER_COUNT + c];
+    for (let c = 0; c < 4; c++) tint[k * 4 + c] = tint[v * 4 + c];
+    k++;
   };
   for (let i = 0; i <= N; i++) skirt(i);
   for (let i = 0; i <= N; i++) skirt(N * E + i);
   for (let j = 0; j <= N; j++) skirt(j * E);
   for (let j = 0; j <= N; j++) skirt(j * E + N);
 
-  const result = { positions, normals, colors, minY: minY - depth, maxY };
-  if (lod === 0 && grassDensity > 0) result.grass = buildGrass(terrain, cx, cz, grid, grassDensity);
+  const result = { positions, normals, splat, tint, minY: minY - depth, maxY };
+  if (lod === 0 && grassDensity > 0) result.grass = buildGrass(terrain, cx, cz, grid, grassDensity, splat, tint);
   return result;
 }
 
@@ -209,7 +209,9 @@ function shade(base, k) {
   return [base[0] * k, base[1] * k, base[2] * k];
 }
 
-function buildGrass(terrain, cx, cz, grid, density) {
+// Пучки травы: где на земле трава — гуще, на щебне и песке — редкие сухие пучки.
+// Вариант атласа: 0 — зелёная, 1 — сухая, 2 — с белыми и жёлтыми цветами, 3 — с лиловыми.
+function buildGrass(terrain, cx, cz, grid, density, splat, tint) {
   const cfg = CONFIG.veg;
   const n = Math.round(S / cfg.grassCell);
   const cell = S / n;
@@ -219,32 +221,57 @@ function buildGrass(terrain, cx, cz, grid, density) {
   const sC = mixSeed(seed, 103);
   const sD = mixSeed(seed, 104);
   const sE = mixSeed(seed, 105);
-  const { G, step, C, M, J, NY } = grid;
-  const store = {};
+  const sF = mixSeed(seed, 106);
+  const { G, step, N, C, M, J, NY } = grid;
+  const E = N + 1;
+  const m = [];
+  const col = [];
+  const variant = [];
+  const L = LAYER_COUNT;
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
       const gx = cx * n + i;
       const gz = cz * n + j;
       const r0 = hash2i(sA, gx, gz);
-      if (r0 >= 0.9 * density) continue;
+      if (r0 >= density) continue;
       const lx = (i + hash2i(sB, gx, gz)) * cell;
       const lz = (j + hash2i(sC, gx, gz)) * cell;
+      const vi = Math.min(N, Math.round(lx / step));
+      const vj = Math.min(N, Math.round(lz / step));
+      const v = vj * E + vi;
+      const g = (vj + 1) * G + vi + 1;
+      if (NY[g] < cfg.maxGrassSlope) continue;
+      const w = (k) => splat[v * L + k] / 255;
+      const lush = w(LAYER.GRASS);
+      const dryW = w(LAYER.DRY) + w(LAYER.DESERT) * 0.25 + w(LAYER.SAND) * 0.06;
+      const p = (lush + w(LAYER.DRY) * 0.9 + w(LAYER.FOREST) * 0.28 + w(LAYER.DESERT) * 0.12 + w(LAYER.SAND) * 0.04 + w(LAYER.ROCKY) * 0.1) * cfg.grassFill;
+      if (r0 >= p * density) continue;
       const h = gridSurface(grid, lx, lz);
       if (h < SEA + 0.25) continue;
-      const g = (Math.round(lz / step) + 1) * G + Math.round(lx / step) + 1;
-      if (NY[g] < cfg.maxGrassSlope) continue;
-      const key = BIOMES[terrain.classify(h, C[g], M[g], NY[g], J[g])].key;
-      const p = cfg.grassP[key] || 0;
-      if (r0 >= p * density) continue;
       const r1 = hash2i(sD, gx, gz);
       const r2 = hash2i(sE, gx, gz);
-      const s = 0.7 + 0.6 * r1;
-      const tint = VC.grass[key] || VC.grass.plains;
-      pushInstance(store, 'grass', lx, h - 0.04, lz, r2 * Math.PI * 2, s, s * (0.75 + 0.5 * r2), s, shade(tint, 0.85 + 0.3 * r1));
+      let kind = 0;
+      if (r1 < dryW / Math.max(lush + dryW, 1e-3)) kind = 1;
+      else {
+        // цветы — полянками: решение принимается по крупной клетке
+        const key = BIOMES[terrain.classify(h, C[g], M[g], NY[g], J[g])].key;
+        const patch = hash2i(sF, Math.floor(gx / 6), Math.floor(gz / 6));
+        const fp = cfg.flowerP[key] || 0;
+        if (patch < fp && r2 < 0.55) kind = patch < fp * 0.5 ? 2 : 3;
+      }
+      const s = (0.75 + 0.5 * r1) * (kind === 1 ? 0.85 : 1);
+      const sy = s * (0.7 + 0.6 * r2) * (lush < 0.3 && kind !== 1 ? 0.75 : 1);
+      const rot = r2 * Math.PI * 2;
+      const c = Math.cos(rot);
+      const sn = Math.sin(rot);
+      m.push(c * s, 0, -sn * s, 0, 0, sy, 0, 0, sn * s, 0, c * s, 0, lx, h - 0.05, lz, 1);
+      // оттенок пучка = оттенок земли под ним (лес темнее, альпийские луга желтее) и немного случайности
+      const k = 0.9 + 0.2 * r1;
+      col.push((tint[v * 4] / 127.5) * k, (tint[v * 4 + 1] / 127.5) * k, (tint[v * 4 + 2] / 127.5) * k);
+      variant.push(kind);
     }
   }
-  const packed = packStore(store).grass;
-  return packed || { matrices: new Float32Array(0), colors: new Float32Array(0), count: 0 };
+  return { matrices: new Float32Array(m), colors: new Float32Array(col), variants: new Float32Array(variant), count: variant.length };
 }
 
 export function buildVegetationChunk(terrain, cx, cz, density) {
@@ -318,53 +345,28 @@ export function buildVegetationChunk(terrain, cx, cz, density) {
         const sz = s * (0.8 + 0.5 * (1 - r5));
         const base = VC.rock[key] || VC.rock.plains;
         const y = h - sink * sy;
-        pushInstance(store, 'rock', lx, y, lz, rot, sx, sy, sz, shade(base, 0.85 + 0.3 * r5));
+        // камни разной формы: вариант модели — по хешу, номер в альфе нельзя, поэтому отдельные типы
+        const variant = Math.floor(r5 * 997) % cfg.rockVariants;
+        pushInstance(store, `rock${variant}`, lx, y, lz, rot, sx, sy, sz, shade(base, 0.9 + 0.2 * r5));
         if (sy > 0.55) colliders.push(lx, lz, 0.8 * Math.max(sx, sz), y + 0.85 * sy, 1);
         continue;
       }
       const s = smin + (smax - smin) * r3;
       const sy = s * (0.9 + 0.25 * r5);
+      let kind = type;
       let palette = VC[type];
-      if (type === 'oak' && r5 < cfg.autumnChance && key === 'forest') palette = VC.oakAutumn;
-      const color = shade(palette[Math.floor(r5 * 997) % palette.length], 0.88 + 0.24 * r4);
+      if (type === 'oak' && r5 < cfg.autumnChance && key === 'forest') {
+        kind = 'oakAutumn';
+        palette = VC.oakAutumn;
+      }
+      const color = shade(palette[Math.floor(r5 * 997) % palette.length], 0.92 + 0.16 * r4);
       const y = h - sink;
-      pushInstance(store, type, lx, y, lz, rot, s, sy, s, color);
-      if (type === 'cactus') colliders.push(lx, lz, 0.45 * s, y + 3 * sy, 0);
-      else if (type !== 'bush' && type !== 'deadBush') colliders.push(lx, lz, 0.32 * s, y + 9 * sy, 0);
-    }
-  }
-
-  // Цветы: мелкая сетка, только на равнинах, в лесу и на горных лугах
-  const nf = Math.round(S / cfg.flowerCell);
-  const fcell = S / nf;
-  const f0 = mixSeed(seed, 301);
-  const f1 = mixSeed(seed, 302);
-  const f2 = mixSeed(seed, 303);
-  const f3 = mixSeed(seed, 304);
-  for (let j = 0; j < nf; j++) {
-    for (let i = 0; i < nf; i++) {
-      const gx = cx * nf + i;
-      const gz = cz * nf + j;
-      const r0 = hash2i(f0, gx, gz);
-      if (r0 >= 0.12 * density) continue;
-      const lx = (i + hash2i(f1, gx, gz)) * fcell;
-      const lz = (j + hash2i(f2, gx, gz)) * fcell;
-      const hApprox = bilinear(grid, grid.H, lx, lz);
-      const ny = bilinear(grid, grid.NY, lx, lz);
-      const key =
-        BIOMES[
-          terrain.classify(hApprox, bilinear(grid, grid.C, lx, lz), bilinear(grid, grid.M, lx, lz), ny, bilinear(grid, grid.J, lx, lz))
-        ].key;
-      const p = cfg.flowerP[key] || 0;
-      if (r0 >= p * density || ny < cfg.maxGrassSlope || hApprox < SEA + 0.5) continue;
-      const h = terrain.surface(ox + lx, oz + lz).h;
-      const r3 = hash2i(f3, gx, gz);
-      const [smin, smax, sink] = cfg.scale.flower;
-      const s = smin + (smax - smin) * r3;
-      // в одной полянке — близкие цвета: палитра выбирается по крупной клетке
-      const patch = hash2i(f3, Math.floor(gx / 4), Math.floor(gz / 4));
-      const col = VC.flowers[Math.floor((patch * 0.7 + r3 * 0.3) * VC.flowers.length) % VC.flowers.length];
-      pushInstance(store, 'flower', lx, h - sink, lz, r3 * 6.283, s, s, s, col);
+      // у каждого вида несколько форм дерева: выбор по хешу
+      const forms = cfg.forms[type] || 1;
+      const form = Math.floor(r3 * 7919 + r4 * 104729) % forms;
+      pushInstance(store, forms > 1 ? `${kind}${form}` : kind, lx, y, lz, rot, s, sy, s, color);
+      const trunk = cfg.trunk[type];
+      if (trunk) colliders.push(lx, lz, trunk[0] * s, y + trunk[1] * sy, 0);
     }
   }
 
@@ -373,5 +375,3 @@ export function buildVegetationChunk(terrain, cx, cz, density) {
 
 // Препятствие в colliders: x, z (локально в чанке), радиус, верх, можно ли стоять сверху
 export const COLLIDER_STRIDE = 5;
-
-export const VEG_TYPES = ['pine', 'snowPine', 'oak', 'birch', 'palm', 'cactus', 'bush', 'deadBush', 'rock', 'flower'];

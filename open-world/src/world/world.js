@@ -7,17 +7,16 @@ import { buildVegetationChunk, COLLIDER_STRIDE } from './chunkgen.js';
 import { Vegetation } from './vegetation.js';
 import { Sky } from './sky.js';
 import { Water } from './water.js';
-import { Clouds } from './clouds.js';
-import { shared } from './materials.js';
+import { shared, terrainUniforms } from './materials.js';
+import { atmo } from './atmosphere.js';
 
 export class World {
   constructor(scene) {
     this.scene = scene;
     this.sky = new Sky(scene);
-    this.water = new Water(scene);
-    this.clouds = new Clouds(scene);
     this.veg = new Vegetation(scene);
     this.chunks = new ChunkManager(scene, this.veg);
+    this.water = new Water(scene, this.chunks.heightfield);
     this.terrain = null;
     this.seed = 0;
     this.time = CONFIG.time.startTime;
@@ -31,7 +30,19 @@ export class World {
     this.seed = seed >>> 0;
     this.terrain = createTerrain(this.seed);
     this.chunks.start(this.seed);
-    this.clouds.setSeed(this.seed);
+    this.sky.setSeed(this.seed);
+  }
+
+  // Текстуры и модели: после загрузки и при смене качества (tier — набор шейдеров, res — разрешение слоёв земли)
+  setAssets(renderer, assets, tier, res) {
+    const t = assets.terrain[res];
+    terrainUniforms.uTerrain.value = t.texture;
+    terrainUniforms.uTexSize.value = t.size;
+    atmo.uNoiseTex.value = assets.tex.noise;
+    this.water.setTextures(assets.tex);
+    this.sky.setTier(tier);
+    this.veg.build(renderer, assets, tier);
+    this.chunks.vegDirty = true;
   }
 
   applySettings(quality, viewChunks, camera) {
@@ -47,13 +58,13 @@ export class World {
     camera.updateProjectionMatrix();
     this.sky.setRadius(view * 1.4 + 150);
     this.water.setSize(view);
-    this.clouds.configure(quality.clouds, view);
-    const g = CONFIG.lod.distances[0] * quality.lodScale;
-    shared.uGrassFade.value.set(g - 16, g - 2);
+    shared.uGrassFade.value.set(quality.grassFar * 0.72, quality.grassFar);
     shared.uSmallFade.value.set(L.smallFar - 18, L.smallFar);
     shared.uTreeFade.value.set(L.treeFar - 35, L.treeFar);
+    const tier = quality.tier;
+    this.chunks.setTerrainQuality(tier !== 'low', quality.shadows && (tier === 'high' || tier === 'ultra'));
     this.veg.setShadows(quality.shadows);
-    this.sky.setShadows(quality.shadows, CONFIG.render.shadowSize, CONFIG.render.shadowRange);
+    this.sky.setShadows(quality.shadows, quality.shadowSize, quality.shadowRange);
   }
 
   // dt — реальное время кадра; time идёт только когда идёт игра (или медленно в меню)
@@ -67,13 +78,14 @@ export class World {
     }
   }
 
-  update(dt, camera, focus) {
+  update(dt, camera, focus, renderer) {
     this.elapsed += dt;
     shared.uTime.value = this.elapsed;
     shared.uWind.value = 0.75 + 0.35 * Math.sin(this.elapsed * 0.13) + 0.15 * Math.sin(this.elapsed * 0.71);
-    this.sky.update(this.time, camera.position, this.elapsed);
-    this.water.update(camera.position, this.sky);
-    this.clouds.update(dt, camera.position, this.sky);
+    shared.uWindDir.value.copy(this.sky.windDir);
+    this.sky.update(this.time, this.day, camera.position, this.elapsed, renderer, dt);
+    if (this.sky.envTexture && this.scene.environment !== this.sky.envTexture) this.scene.environment = this.sky.envTexture;
+    this.water.update(camera.position);
     camera.getWorldDirection(this.tmpDir);
     this.chunks.update(dt, focus.x, focus.z, this.tmpDir.x, this.tmpDir.z);
   }

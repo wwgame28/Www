@@ -3,8 +3,9 @@ import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { buildChunkIndex, COLLIDER_STRIDE } from './chunkgen.js';
 import { createTerrainMaterial } from './materials.js';
-import { createTerrain } from './terrain.js';
+import { createTerrain, LAYER_COUNT } from './terrain.js';
 import { runJob } from './jobs.js';
+import { Heightfield } from './heightfield.js';
 
 const S = CONFIG.world.chunkSize;
 // числовой ключ чанка: без строк — без мусора для сборщика каждый кадр
@@ -20,7 +21,9 @@ export class ChunkManager {
   constructor(scene, vegetation) {
     this.scene = scene;
     this.veg = vegetation;
-    this.material = createTerrainMaterial();
+    this.hq = true;
+    this.material = createTerrainMaterial(true);
+    this.heightfield = new Heightfield();
     this.indices = CONFIG.lod.segments.map((N) => new THREE.BufferAttribute(buildChunkIndex(N), 1));
     this.pools = CONFIG.lod.segments.map(() => []);
     this.chunks = new Map();
@@ -31,7 +34,7 @@ export class ChunkManager {
     this.gen = 0;
     this.seed = 0;
     this.focus = { x: 0, z: 0, dirX: 0, dirZ: -1 };
-    this.limits = { view: 384, lodScale: 1, vegDensity: 1, grassDensity: 1, treeNear: 100, treeFar: 320, smallFar: 90, flowerFar: 56 };
+    this.limits = { view: 384, lodScale: 1, vegDensity: 1, grassDensity: 1, treeNear: 70, treeMid: 170, treeFar: 320, smallNear: 40, smallFar: 90 };
     this.vegDirty = true;
     this.vegTimer = 0;
     this.scanTimer = 0;
@@ -135,9 +138,10 @@ export class ChunkManager {
     L.vegDensity = q.vegDensity;
     L.grassDensity = q.grassDensity;
     L.treeFar = Math.min(q.treeFar, view * CONFIG.render.fogFarFactor);
-    L.treeNear = Math.min(q.treeNear, L.treeFar);
+    L.treeMid = Math.min(q.treeMid, L.treeFar);
+    L.treeNear = Math.min(q.treeNear, L.treeMid);
     L.smallFar = Math.min(q.smallFar, L.treeFar);
-    L.flowerFar = CONFIG.lod.distances[0] * q.lodScale;
+    L.smallNear = Math.min(L.treeNear, L.smallFar * 0.5);
     if (prevVeg !== L.vegDensity) {
       for (const ch of this.chunks.values()) {
         ch.veg = null;
@@ -187,6 +191,7 @@ export class ChunkManager {
     }
     this.dispatch();
     this.applyReady();
+    this.heightfield.update(dt);
     this.vegTimer -= dt;
     if (this.vegTimer <= 0) {
       this.vegTimer = CONFIG.streaming.vegRebuildSec;
@@ -356,17 +361,42 @@ export class ChunkManager {
     const verts = (N + 1) * (N + 1) + 4 * (N + 1);
     const geo = new THREE.BufferGeometry();
     geo.setIndex(this.indices[lod]);
-    for (const name of ['position', 'normal', 'color']) {
+    for (const name of ['position', 'normal']) {
       const a = new THREE.BufferAttribute(new Float32Array(verts * 3), 3);
       a.setUsage(THREE.DynamicDrawUsage);
       geo.setAttribute(name, a);
     }
+    // веса восьми слоёв земли — байты, два vec4 из одного буфера
+    const splat = new THREE.InterleavedBuffer(new Uint8Array(verts * LAYER_COUNT), LAYER_COUNT);
+    splat.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('splatA', new THREE.InterleavedBufferAttribute(splat, 4, 0, true));
+    geo.setAttribute('splatB', new THREE.InterleavedBufferAttribute(splat, 4, 4, true));
+    const tint = new THREE.BufferAttribute(new Uint8Array(verts * 4), 4, true);
+    tint.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('tint', tint);
     geo.boundingSphere = new THREE.Sphere();
     const mesh = new THREE.Mesh(geo, this.material);
     mesh.matrixAutoUpdate = false;
     mesh.receiveShadow = true;
+    mesh.castShadow = this.castShadow || false;
     mesh.userData.lod = lod;
     return mesh;
+  }
+
+  // Набор шейдеров земли (полный или облегчённый для телефонов) и тени от рельефа
+  setTerrainQuality(hq, castShadow) {
+    this.castShadow = castShadow;
+    const apply = (m) => {
+      m.material = this.material;
+      m.castShadow = castShadow;
+    };
+    if (hq !== this.hq) {
+      this.hq = hq;
+      this.material.dispose();
+      this.material = createTerrainMaterial(hq);
+    }
+    for (const ch of this.chunks.values()) if (ch.mesh) apply(ch.mesh);
+    for (const pool of this.pools) for (const m of pool) apply(m);
   }
 
   applyTerrain(ch, r) {
@@ -375,10 +405,13 @@ export class ChunkManager {
     const geo = mesh.geometry;
     geo.attributes.position.array.set(r.positions);
     geo.attributes.normal.array.set(r.normals);
-    geo.attributes.color.array.set(r.colors);
+    geo.attributes.splatA.data.array.set(r.splat);
+    geo.attributes.tint.array.set(r.tint);
     geo.attributes.position.needsUpdate = true;
     geo.attributes.normal.needsUpdate = true;
-    geo.attributes.color.needsUpdate = true;
+    geo.attributes.splatA.data.needsUpdate = true;
+    geo.attributes.tint.needsUpdate = true;
+    this.heightfield.writeChunk(ch.cx, ch.cz, r.positions, CONFIG.lod.segments[lod]);
     const half = S / 2;
     geo.boundingSphere.center.set(half, (r.minY + r.maxY) / 2, half);
     geo.boundingSphere.radius = Math.sqrt(half * half * 2 + ((r.maxY - r.minY) / 2) ** 2) + 0.5;
@@ -421,7 +454,7 @@ export class ChunkManager {
   // (ближние деревья / дальние / мелочь / цветы) или пришли и ушли данные
   vegBand(d) {
     const L = this.limits;
-    return (d <= L.treeNear ? 1 : 0) | (d <= L.treeFar ? 2 : 0) | (d <= L.smallFar ? 4 : 0) | (d <= L.flowerFar ? 8 : 0);
+    return (d <= L.treeNear ? 1 : 0) | (d <= L.treeMid ? 2 : 0) | (d <= L.treeFar ? 4 : 0) | (d <= L.smallNear ? 8 : 0) | (d <= L.smallFar ? 16 : 0);
   }
 
   maybeRebuildVegetation() {
